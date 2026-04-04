@@ -25,7 +25,7 @@ const PATTERNS = [
   // Filesystem
   { re: /^(show|list|ls)\s+(files?|dir(?:ectory)?|folder)\s*(?:in|at|of)?\s*(.*)$/i,
     intent: 'fs:ls', extract: (m) => ({ path: m[3].trim() || '.' }) },
-  { re: /^(read|cat|show|open|print)\s+(?:file\s+)?(.+)$/i,
+  { re: /^(read|cat|open|print)\s+(?:file\s+)?(.+)$/i,
     intent: 'fs:read', extract: (m) => ({ path: m[2].trim() }) },
   { re: /^(create|make|touch)\s+(?:a\s+)?(?:file\s+)?(.+)$/i,
     intent: 'fs:touch', extract: (m) => ({ path: m[2].trim() }) },
