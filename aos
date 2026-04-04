@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+'use strict';
+/**
+ * aos — AIOSCPU Prototype One entry point
+ *
+ * Usage (Termux / Linux / macOS):
+ *   chmod +x aos
+ *   ./aos
+ *
+ * Or:
+ *   node aos
+ *   npm start
+ *
+ * Requires: Node.js >= 14.  No external npm packages needed.
+ */
+require('./boot/boot.js').start();
