@@ -1,0 +1,2 @@
+# AIOSCPU-PROTYPE
+Protype Os
