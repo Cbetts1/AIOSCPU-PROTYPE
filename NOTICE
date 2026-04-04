@@ -1,0 +1,79 @@
+================================================================================
+  AIOSCPU Prototype One — AIOS Lite
+  Copyright Notice & Third-Party Attributions
+================================================================================
+
+Copyright (c) 2026 Cbetts1
+All rights reserved.
+
+This project is released under the MIT License.
+See the LICENSE file in the root of this repository for full terms.
+
+--------------------------------------------------------------------------------
+OWNERSHIP
+--------------------------------------------------------------------------------
+
+AIOSCPU Prototype One, including all source code, documentation, architecture
+designs, instruction set specifications, module interfaces, and associated
+materials contained in this repository, is the original intellectual property of:
+
+    Cbetts1
+    GitHub: https://github.com/Cbetts1
+    Repository: https://github.com/Cbetts1/AIOSCPU-PROTYPE
+
+The following sub-systems were conceived, designed, and implemented by Cbetts1:
+
+  - AIOSCPU v1.0 Instruction Set Architecture (ISA)
+  - AIOS Kernel (event bus, process table, module registry, syscall interface)
+  - AIOS Router (command dispatch, hot-swap module system)
+  - AIOS In-Memory Virtual Filesystem (VFS)
+  - AIOS Service Manager
+  - AIOS Interactive Terminal (REPL)
+  - AIOS Lite Boot Sequence
+  - AIOSCPU–Kernel Handshake Protocol
+
+--------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------------
+
+This project uses NO third-party libraries or external npm packages.
+
+Runtime dependency: Node.js (https://nodejs.org)
+  - License: MIT (https://github.com/nodejs/node/blob/main/LICENSE)
+  - Node.js is NOT bundled in this repository. It must be installed separately.
+  - On Android/Termux: pkg install nodejs
+
+All standard library modules used (readline, crypto, os, path) are part of
+Node.js core and are covered by the Node.js license above.
+
+--------------------------------------------------------------------------------
+SOURCE REPOSITORIES MERGED INTO THIS PROJECT
+--------------------------------------------------------------------------------
+
+The following repositories, all authored and owned by Cbetts1, were audited
+and their best components merged into this unified codebase:
+
+  - https://github.com/Cbetts1/Kernal-
+  - https://github.com/Cbetts1/Router
+  - https://github.com/Cbetts1/Os-layer
+  - https://github.com/Cbetts1/Os-handshake
+  - https://github.com/Cbetts1/Digtail-Web-CPU
+  - https://github.com/Cbetts1/Terminal
+  - https://github.com/Cbetts1/Files-system
+  - https://github.com/Cbetts1/Backend-file-system-
+  - https://github.com/Cbetts1/NEW-ATTEMPT
+  - https://github.com/Cbetts1/PROJECT
+  - https://github.com/Cbetts1/AIOS
+
+All code in those repositories is original work by Cbetts1. No external
+third-party code was incorporated from those repos.
+
+--------------------------------------------------------------------------------
+TRADEMARKS
+--------------------------------------------------------------------------------
+
+"AIOSCPU", "AIOS Lite", "AIOS Prototype One", and "AIOS" as used in this
+project are original names created by Cbetts1. No trademark registration has
+been filed at this time. All rights to these names are reserved by Cbetts1.
+
+================================================================================
