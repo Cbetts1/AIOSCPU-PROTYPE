@@ -1,0 +1,13 @@
+{
+  "name": "kernel-watchdog",
+  "description": "AIOS Kernel Watchdog — monitors kernel health and writes periodic heartbeat to boot log",
+  "target": "multi-user",
+  "command": "kernel-watchdog",
+  "restartPolicy": "on-failure",
+  "maxRestarts": 5,
+  "restartDelay": 10000,
+  "interval": 60000,
+  "enabled": true,
+  "dependsOn": [],
+  "env": {}
+}

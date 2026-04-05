@@ -1,0 +1,13 @@
+{
+  "name": "cpu-idle",
+  "description": "AIOSCPU Idle Process — keeps the virtual CPU process table active during idle periods",
+  "target": "multi-user",
+  "command": "cpu-idle",
+  "restartPolicy": "always",
+  "maxRestarts": 0,
+  "restartDelay": 1000,
+  "interval": 0,
+  "enabled": true,
+  "dependsOn": [],
+  "env": {}
+}

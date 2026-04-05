@@ -1,0 +1,15 @@
+{
+  "name": "ai-monitor",
+  "description": "AIOS AI Monitor — autonomous AI personality monitoring loop (30-second tick)",
+  "target": "multi-user",
+  "command": "ai-monitor",
+  "restartPolicy": "on-failure",
+  "maxRestarts": 5,
+  "restartDelay": 5000,
+  "interval": 0,
+  "enabled": true,
+  "dependsOn": ["kernel-watchdog"],
+  "env": {
+    "AI_MONITOR_INTERVAL": "30000"
+  }
+}

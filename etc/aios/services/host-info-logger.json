@@ -1,0 +1,13 @@
+{
+  "name": "host-info-logger",
+  "description": "Host Info Logger — logs host memory and platform metrics every 5 minutes",
+  "target": "multi-user",
+  "command": "host-info-logger",
+  "restartPolicy": "on-failure",
+  "maxRestarts": 3,
+  "restartDelay": 30000,
+  "interval": 300000,
+  "enabled": true,
+  "dependsOn": ["kernel-watchdog"],
+  "env": {}
+}
