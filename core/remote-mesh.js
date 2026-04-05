@@ -163,6 +163,10 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
   // Ollama base URL — override with OLLAMA_HOST to offload to a home server/PC
   const _ollamaUrl = (process.env.OLLAMA_HOST || 'http://127.0.0.1:11434').replace(/\/$/, '');
 
+  // Optional VFS reference — set via setFilesystem(vfs) after boot
+  // Allows reading /etc/aios/models.json for runtime model customization
+  let _filesystem = null;
+
   // Agents confirmed available by Ollama: agentName → agent config
   const _available = new Map();
 
@@ -551,6 +555,11 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
     memoryCore = mc;
   }
 
+  // ── setFilesystem — wire VFS in after boot (for /etc/aios/models.json) ───
+  function setFilesystem(fs) {
+    _filesystem = fs;
+  }
+
   return {
     name:    'remote-mesh',
     version: VERSION,
@@ -559,6 +568,7 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
     registerWithAICore,
     setMemoryCore,
     setCollectiveIntelligence,
+    setFilesystem,
     status,
     commands,
   };

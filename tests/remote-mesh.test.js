@@ -374,4 +374,140 @@ describe('RemoteMesh', () => {
       expect(speedAgent.tripped).toBe(true);
     });
   });
+
+  // ── queryAll() ───────────────────────────────────────────────────────────
+  describe('queryAll()', () => {
+    test('returns null when no agents available', async () => {
+      fetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+      const mesh = createRemoteMesh(kernel, null);
+      const result = await mesh.queryAll('hello');
+      expect(result).toBeNull();
+    });
+
+    test('queries all available agents in parallel and returns combined response', async () => {
+      fetch
+        .mockResolvedValueOnce(tagsResponse(['qwen2:0.5b', 'phi3', 'mistral']))
+        .mockResolvedValueOnce(chatResponse('qwen2 says hi'))
+        .mockResolvedValueOnce(chatResponse('phi3 deep analysis'))
+        .mockResolvedValueOnce(chatResponse('mistral writes well'));
+
+      const mesh   = createRemoteMesh(kernel, null);
+      const result = await mesh.queryAll('explain everything');
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    test('returns first successful response when some agents fail', async () => {
+      fetch
+        .mockResolvedValueOnce(tagsResponse(['qwen2:0.5b', 'phi3']))
+        .mockResolvedValueOnce(httpError())                       // speed fails
+        .mockResolvedValueOnce(chatResponse('phi3 succeeded'));   // reason succeeds
+
+      const mesh   = createRemoteMesh(kernel, null);
+      const result = await mesh.queryAll('question');
+      expect(result).toBeDefined();
+      expect(result).not.toBeNull();
+    });
+
+    test('returns null when all agents fail', async () => {
+      fetch
+        .mockResolvedValueOnce(tagsResponse(['qwen2:0.5b']))
+        .mockResolvedValueOnce(httpError());
+
+      const mesh   = createRemoteMesh(kernel, null);
+      const result = await mesh.queryAll('fail all');
+      expect(result).toBeNull();
+    });
+
+    test('emits mesh:query-all event on kernel bus', async () => {
+      const events = [];
+      kernel.bus.on('mesh:query-all', e => events.push(e));
+
+      fetch
+        .mockResolvedValueOnce(tagsResponse(['qwen2:0.5b']))
+        .mockResolvedValueOnce(chatResponse('answer'));
+
+      const mesh = createRemoteMesh(kernel, null);
+      await mesh.queryAll('emit test');
+      expect(events.length).toBe(1);
+      expect(events[0]).toHaveProperty('count');
+    });
+
+    test('contributes to collective intelligence when wired', async () => {
+      const ci = { contribute: jest.fn(), context: jest.fn(() => ''), synthesize: jest.fn(ps => ps[0].response) };
+      fetch
+        .mockResolvedValueOnce(tagsResponse(['qwen2:0.5b']))
+        .mockResolvedValueOnce(chatResponse('collective answer'));
+
+      const mesh = createRemoteMesh(kernel, null, ci);
+      await mesh.queryAll('collective test');
+      expect(ci.contribute).toHaveBeenCalledWith('speed', 'collective test', 'collective answer');
+    });
+
+    test('records to memoryCore on success', async () => {
+      const mc = { record: jest.fn() };
+      fetch
+        .mockResolvedValueOnce(tagsResponse(['qwen2:0.5b']))
+        .mockResolvedValueOnce(chatResponse('recorded'));
+
+      const mesh = createRemoteMesh(kernel, mc);
+      await mesh.queryAll('record test');
+      expect(mc.record).toHaveBeenCalledWith('mesh:all', 'record test', expect.any(String), null);
+    });
+  });
+
+  // ── setCollectiveIntelligence() ───────────────────────────────────────────
+  describe('setCollectiveIntelligence()', () => {
+    test('does not throw', () => {
+      const mesh = createRemoteMesh(kernel, null);
+      expect(() => mesh.setCollectiveIntelligence({ contribute: jest.fn(), context: jest.fn(() => ''), synthesize: jest.fn() })).not.toThrow();
+    });
+
+    test('collective context is injected into query prompt after wiring', async () => {
+      const capturedBodies = [];
+      fetch.mockImplementation((url, opts) => {
+        if (url.includes('/api/tags')) return Promise.resolve(tagsResponse(['qwen2:0.5b']));
+        if (opts && opts.body) capturedBodies.push(JSON.parse(opts.body));
+        return Promise.resolve(chatResponse('with context'));
+      });
+
+      const ci = {
+        contribute: jest.fn(),
+        context:    jest.fn(() => '[Collective Intelligence — relevant prior knowledge:]\n  [reason] Previous insight.\n[End of collective context]'),
+        synthesize: jest.fn(ps => ps[0] && ps[0].response),
+      };
+      const mesh = createRemoteMesh(kernel, null, ci);
+      await mesh.query('hello');
+
+      // The system message in the chat call should contain the collective context
+      const chatBody  = capturedBodies.find(b => b.messages);
+      const systemMsg = chatBody && chatBody.messages.find(m => m.role === 'system');
+      expect(systemMsg).toBeDefined();
+      expect(systemMsg.content).toMatch(/Collective Intelligence/);
+    });
+
+    test('contribute() is called after successful query', async () => {
+      const ci = { contribute: jest.fn(), context: jest.fn(() => ''), synthesize: jest.fn() };
+      fetch
+        .mockResolvedValueOnce(tagsResponse(['qwen2:0.5b']))
+        .mockResolvedValueOnce(chatResponse('contributed'));
+
+      const mesh = createRemoteMesh(kernel, null, ci);
+      await mesh.query('test contribute');
+      expect(ci.contribute).toHaveBeenCalledWith('speed', 'test contribute', 'contributed');
+    });
+  });
+
+  // ── setFilesystem() ───────────────────────────────────────────────────────
+  describe('setFilesystem()', () => {
+    test('does not throw', () => {
+      const mesh = createRemoteMesh(kernel, null);
+      expect(() => mesh.setFilesystem({ read: jest.fn(), write: jest.fn(), mkdir: jest.fn() })).not.toThrow();
+    });
+
+    test('mesh API includes setFilesystem', () => {
+      const mesh = createRemoteMesh(kernel, null);
+      expect(typeof mesh.setFilesystem).toBe('function');
+    });
+  });
 });

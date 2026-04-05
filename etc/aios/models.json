@@ -1,0 +1,82 @@
+{
+  "version": "1.0.0",
+  "description": "AIOS AI Mesh — 7 open-source models wired as one brain. All free. No API keys. No cloud.",
+  "ollamaHost": "http://127.0.0.1:11434",
+  "note": "Set OLLAMA_HOST env var to point at a home server/PC so your phone stays light.",
+  "agents": [
+    {
+      "name":      "speed",
+      "model":     "qwen2:0.5b",
+      "role":      "Speed Agent",
+      "size":      "394MB",
+      "specialty": "Fast replies, lightweight queries — fits any phone",
+      "pull":      "ollama pull qwen2:0.5b"
+    },
+    {
+      "name":      "chat",
+      "model":     "tinyllama",
+      "role":      "Chat Agent",
+      "size":      "637MB",
+      "specialty": "Friendly conversation, general help, everyday questions",
+      "pull":      "ollama pull tinyllama"
+    },
+    {
+      "name":      "logic",
+      "model":     "gemma:2b",
+      "role":      "Logic Agent",
+      "size":      "1.4GB",
+      "specialty": "Step-by-step reasoning, comparisons, if/then analysis",
+      "pull":      "ollama pull gemma:2b"
+    },
+    {
+      "name":      "reason",
+      "model":     "phi3",
+      "role":      "Reason Agent",
+      "size":      "2.3GB",
+      "specialty": "Deep analysis, cause/effect, why/how questions",
+      "pull":      "ollama pull phi3"
+    },
+    {
+      "name":      "code",
+      "model":     "deepseek-coder:6.7b",
+      "role":      "Code Agent",
+      "size":      "3.8GB",
+      "specialty": "Code generation, debugging, scripts, refactoring",
+      "pull":      "ollama pull deepseek-coder:6.7b"
+    },
+    {
+      "name":      "mind",
+      "model":     "llama3",
+      "role":      "Mind Agent",
+      "size":      "4.7GB",
+      "specialty": "Full-power reasoning, research, complex multi-step problems",
+      "pull":      "ollama pull llama3"
+    },
+    {
+      "name":      "write",
+      "model":     "mistral",
+      "role":      "Write Agent",
+      "size":      "4.1GB",
+      "specialty": "Writing, summarizing, explanations, documentation",
+      "pull":      "ollama pull mistral"
+    }
+  ],
+  "setup": [
+    "# Install Ollama (one-time):",
+    "pkg install curl",
+    "curl -fsSL https://ollama.com/install.sh | sh",
+    "ollama serve &",
+    "",
+    "# Pull models (start with the small ones, add more as space allows):",
+    "ollama pull qwen2:0.5b          # 394MB — start here",
+    "ollama pull tinyllama           # 637MB",
+    "ollama pull gemma:2b            # 1.4GB",
+    "ollama pull phi3                # 2.3GB",
+    "ollama pull deepseek-coder:6.7b # 3.8GB",
+    "ollama pull llama3              # 4.7GB",
+    "ollama pull mistral             # 4.1GB",
+    "",
+    "# To offload all compute to a home server/PC (phone stays ultra-light):",
+    "export OLLAMA_HOST=http://192.168.1.100:11434"
+  ]
+}

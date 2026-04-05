@@ -137,6 +137,15 @@ function start() {
   const vfs = createFilesystem();
   kernel.modules.load('filesystem', vfs);
 
+  // ── 2.5. COLLECTIVE INTELLIGENCE ─────────────────────────────────────────
+  // Shared brain: every response from every mesh model is stored here.
+  // AIOS, AURA, and all 7 models draw from this before answering.
+  // Created here (after VFS) so it can persist knowledge across reboots.
+  const collectiveIntelligence = createCollectiveIntelligence(kernel, memoryCore, vfs);
+  collectiveIntelligence.restore();
+  kernel.modules.load('collective-intelligence', collectiveIntelligence);
+  bootMsg('ok', `Collective Intelligence v${collectiveIntelligence.version}  shared brain online`);
+
   // ── 3. ROOTFS ──────────────────────────────────────────────────────────────
   const rootfsResult = buildRootFS(vfs, { hostname: 'aioscpu', version: '3.0.0' });
   bootMsg('ok', `RootFS  built — ${rootfsResult.dirs.length} dirs, ${rootfsResult.files.length} files`);
@@ -236,6 +245,8 @@ function start() {
 
   // Filesystem commands
   router.use('filesystem', vfs);
+  // Collective intelligence commands (collective status/log/recall)
+  router.use('collective-intelligence', collectiveIntelligence);
 
   // OS info commands
   router.use('os', {
@@ -503,6 +514,29 @@ function start() {
   router.use('model-registry', modelRegistry);
   bootMsg('info', 'Model Registry  discovering models…');
 
+  // Register the 7 mesh models from /etc/aios/models.json into the model registry
+  // so the full system (consciousness, diagnostics, ai-core) knows they exist.
+  (() => {
+    const r = vfs.read('/etc/aios/models.json');
+    if (!r || !r.ok) return;
+    try {
+      const manifest  = JSON.parse(r.content);
+      const agents    = manifest.agents || [];
+      const ollamaHost = manifest.ollamaHost || 'http://127.0.0.1:11434';
+      for (const agent of agents) {
+        modelRegistry.register({
+          name:     `mesh:${agent.name}`,
+          type:     'ollama',
+          endpoint: ollamaHost,
+          modes:    ['chat', 'code', 'fix', 'help', 'learn', 'reason'],
+          meta:     { model: agent.model, role: agent.role, size: agent.size,
+                      specialty: agent.specialty, mesh: true },
+        });
+      }
+      bootMsg('ok', `Model Registry  ${agents.length} mesh models registered from /etc/aios/models.json`);
+    } catch (_) {}
+  })();
+
   // ── 22. CONSCIOUSNESS ─────────────────────────────────────────────────────
   const consciousness = createConsciousness(kernel, router, memoryEngine, modeManager, modelRegistry, aiCoreFinal);
   kernel.modules.load('consciousness', consciousness);
@@ -519,7 +553,7 @@ function start() {
   // Terminal: `aios <question>`  |  `aura <question>`
   //           `svc start aura`   |  `svc stop aura`
   const aiosAura = createAIOSAURA(
-    kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager,
+    kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager, collectiveIntelligence,
   );
   aiosAura.registerWithAICore(aiCoreFinal);
   aiosAura.registerServices();
@@ -532,11 +566,14 @@ function start() {
   // No API keys. No cloud. All Ollama. Phone sends ~1KB JSON, server does work.
   // Set OLLAMA_HOST=http://<server>:11434 to offload to a home PC/server.
   // Each agent has a specialty; AIOS routes queries to the right model.
-  // All responses flow through memory-core — system grows smarter over time.
-  const aiMesh = createRemoteMesh(kernel, memoryCore);
+  // All responses flow through collective-intelligence — system grows smarter.
+  const aiMesh = createRemoteMesh(kernel, memoryCore, collectiveIntelligence);
   aiMesh.registerWithAICore(aiCoreFinal);
+  aiMesh.setFilesystem(vfs);      // gives mesh access to /etc/aios/models.json
   kernel.modules.load('remote-mesh', aiMesh);
   router.use('remote-mesh', aiMesh);
+  // Cross-wire AIOS+AURA ↔ Mesh ↔ Collective Intelligence
+  aiosAura.setMesh(aiMesh);       // AIOS/AURA can call mesh.queryAll() for deep questions
   bootMsg('ok', `AI Mesh  v${aiMesh.version}  online  (7 models — no keys, no cloud)`);
   bootMsg('info', '  → `mesh status` to see agents.  `mesh help` for setup guide.');
 
@@ -592,6 +629,7 @@ function start() {
   kernel.bus.on('kernel:shutdown', ({ uptime }) => {
     vfs.append('/var/log/boot.log', `[${ts()}] AIOS shutdown after ${uptime}s\n`);
     memoryEngine.persist();
+    collectiveIntelligence.persist();   // save shared brain to /var/lib/aios/collective.json
     consciousness.stopProactive();
     aiosAura.stopListening();
     diagnostics.stop();
