@@ -66,12 +66,20 @@ const AURA_MODEL_PREFERENCE = [
   'tinyllama',    // 637 MB  — last resort
 ];
 
-// Max conversation turns to keep in memory per identity
-const MAX_HISTORY_TURNS = 10; // 10 user+assistant pairs = 20 messages
+// Max conversation turns to keep in memory per identity.
+// Each turn = 1 user message + 1 assistant message = 2 entries.
+// The system message is always prepended at query time and is not stored here.
+const MAX_HISTORY_TURNS = 10;
 
-// ---------------------------------------------------------------------------
-// Helper: promise with timeout
-// ---------------------------------------------------------------------------
+// Keywords that route a query to AURA when AURA is online.
+// Extracted as a constant so the list is easy to extend.
+const AURA_KEYWORDS = [
+  'analyze', 'analyse', 'hardware', 'cpu load', 'memory pressure',
+  'deep dive', 'architecture', 'thoroughly', 'diagnose', 'benchmark',
+  'trace', 'audit', 'profile', 'system report', 'evaluate', 'assess',
+  'inspect', 'investigate', 'examine',
+];
+const _AURA_PATTERN = new RegExp(`\\b(${AURA_KEYWORDS.join('|')})\\b`, 'i');
 function _withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);
@@ -186,7 +194,12 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       const r = await _withTimeout(fetch(`${OLLAMA_URL}/api/tags`), 3000);
       if (!r.ok) return null;
       const data = await r.json();
-      const installed = (data.models || []).map(m => m.name.split(':')[0].toLowerCase());
+      const installed = (data.models || []).map(m => {
+        // Ollama model names can be "phi3:latest", "phi3", "qwen2:0.5b", etc.
+        // Normalise to the base name (before the first colon) for matching.
+        const base = (m.name || '').split(':')[0].toLowerCase();
+        return base;
+      });
       for (const candidate of preferenceList) {
         const base = candidate.split(':')[0].toLowerCase();
         if (installed.includes(base)) return candidate;
@@ -266,12 +279,15 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     return reply;
   }
 
-  // ── Routing: AURA gets deep-analysis queries when online ──────────────────
-  const _AURA_PATTERN = /\b(analyze|analyse|hardware|cpu load|memory pressure|deep dive|architecture|thoroughly|diagnose|benchmark|trace|audit|profile|system report|evaluate|assess|inspect|investigate|examine)\b/i;
-
+  // ── Routing: AURA gets deep-analysis queries when it is online ────────────
   function _pickIdentity(input) {
     if (_AURA_PATTERN.test(input) && _isAURAOnline()) return 'aura';
     return 'aios';
+  }
+
+  // ── Turn count helper: history array stores 2 entries per turn ───────────
+  function _turnCount(history) {
+    return Math.floor(history.length / 2);
   }
 
   // ── Main public query API ─────────────────────────────────────────────────
@@ -442,7 +458,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
         description: 'Kernel personality and mind — always-on AI assistant.',
         model:       _aiosModel || '(detecting…)',
         onDemand:    false,
-        history:     _aiosHistory.length / 2,
+        history:     _turnCount(_aiosHistory),
       },
       {
         name:        'aura',
@@ -450,7 +466,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
         description: 'Hardware intelligence — deep analysis, on-demand.',
         model:       _auraModel || '(not loaded)',
         onDemand:    true,
-        history:     _auraHistory.length / 2,
+        history:     _turnCount(_auraHistory),
       },
     ];
   }
@@ -489,7 +505,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       `╠══════════════════════════════════════════════════════════════╣`,
       `║  AIOS     : Kernel personality — always-on assistant        ║`,
       `║  Model    : ${aiosModelLine.padEnd(49)}║`,
-      `║  Memory   : ${String(_aiosHistory.length / 2).padEnd(2)} conversation turns remembered              ║`,
+      `║  Memory   : ${String(_turnCount(_aiosHistory)).padEnd(2)} conversation turns remembered              ║`,
       `╠══════════════════════════════════════════════════════════════╣`,
       `║  AURA     : Hardware intelligence — on-demand deep analysis ║`,
       `║  Model    : ${auraModelLine.padEnd(49)}║`,
