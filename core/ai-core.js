@@ -518,7 +518,8 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
     _log('fallback', text, 'unrecognised', `intent: ${parsed.intent}`);
     _saveContext();
     return {
-      status: 'ok',
+      status:   'ok',
+      fallback: true,
       result: [
         `I'm not sure how to handle: "${text}"`,
         '',
