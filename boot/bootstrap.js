@@ -23,14 +23,23 @@
  *   15. Initialize Command Router + mount all modules
  *   16. Initialize Mirror Session Manager
  *   17. Initialize Service Manager
- *   18. Initialize PID-1 Boot Init (init.js)
+ *   18. Initialize Service Manager built-in services
+ *   19. Initialize Memory Engine (interactions, queries, learning data)
+ *   20. Initialize Mode Manager (Chat, Code, Fix, Help, Learn)
+ *   21. Initialize Diagnostics Engine (models, ports, system health)
+ *   22. Initialize Port Server (single TCP communication port)
+ *   23. Initialize PID-1 Boot Init (init.js)
  *        → registers all init-target units
  *        → loads service units from /etc/aios/services/*.json
  *        → activates targets: sysinit → basic → multi-user
  *        → starts all services
- *   19. Register syscalls
- *   20. Wire shutdown handlers
- *   21. Hand control to Terminal
+ *   24. Register syscalls
+ *   25. Wire shutdown handlers
+ *   26. Run init sequence + self-check
+ *        → verify memory availability and CPU status
+ *        → confirm port can open
+ *        → test local lightweight AIOSCPU model
+ *   27. Hand control to Terminal
  *
  * Zero external npm dependencies.
  */
@@ -46,6 +55,12 @@ const { createPermissionSystem }= require('../core/permission-system.js');
 const { createAICore }          = require('../core/ai-core.js');
 const { createMirrorSession }   = require('../core/mirror-session.js');
 const { createIdentity }        = require('../core/identity.js');
+
+// ── New AIOS core components ─────────────────────────────────────────────────
+const { createMemoryEngine }     = require('../core/memory-engine.js');
+const { createModeManager }      = require('../core/mode-manager.js');
+const { createDiagnosticsEngine }= require('../core/diagnostics-engine.js');
+const { createPortServer }       = require('../core/port-server.js');
 
 // ── New OS Integration Layer modules ─────────────────────────────────────────
 const { buildRootFS }           = require('../usr/lib/aios/rootfs-builder.js');
@@ -453,7 +468,31 @@ function start() {
 
   bootMsg('ok', 'Service Manager  online');
 
-  // ── 19. BOOT INIT (PID-1) ──────────────────────────────────────────────────
+  // ── 19. MEMORY ENGINE ─────────────────────────────────────────────────────
+  const memoryEngine = createMemoryEngine(kernel);
+  kernel.modules.load('memory-engine', memoryEngine);
+  router.use('memory-engine', memoryEngine);
+  bootMsg('ok', `Memory Engine v${memoryEngine.version}  online`);
+
+  // ── 20. MODE MANAGER ──────────────────────────────────────────────────────
+  const modeManager = createModeManager(kernel, memoryEngine);
+  kernel.modules.load('mode-manager', modeManager);
+  router.use('mode-manager', modeManager);
+  bootMsg('ok', `Mode Manager v${modeManager.version}  mode=${modeManager.getMode()}`);
+
+  // ── 21. DIAGNOSTICS ENGINE ────────────────────────────────────────────────
+  const diagnostics = createDiagnosticsEngine(kernel, hostBridge, { pollIntervalMs: 60000 });
+  kernel.modules.load('diagnostics-engine', diagnostics);
+  router.use('diagnostics-engine', diagnostics);
+  bootMsg('ok', `Diagnostics Engine v${diagnostics.version}  online`);
+
+  // ── 22. PORT SERVER ───────────────────────────────────────────────────────
+  const portServer = createPortServer(kernel, router, diagnostics);
+  kernel.modules.load('port-server', portServer);
+  router.use('port-server', portServer);
+  bootMsg('ok', `Port Server v${portServer.version}  ready  (port ${portServer.info().port})`);
+
+  // ── 23. BOOT INIT (PID-1) ──────────────────────────────────────────────────
   const bootInit = createBootInit({
     kernel, vfs, cpu, hostBridge, perms,
     aiCore: aiCoreFinal, router, svcMgr, mirrorMgr,
@@ -464,7 +503,7 @@ function start() {
   router.use('boot-init', { commands: bootInit.coreInit.commands });
   router.use('service-runner', bootInit.svcRunner);
 
-  // ── 20. SYSCALLS ───────────────────────────────────────────────────────────
+  // ── 24. SYSCALLS ───────────────────────────────────────────────────────────
   kernel.registerSyscall(2, (args) => { const r = vfs.read(String(args[0])); return r.ok ? r.content : null; });
   kernel.registerSyscall(3, (args) => { const r = vfs.write(String(args[0]), String(args[1] || '')); return r.ok ? r.bytes : -1; });
   kernel.registerSyscall(4, (args) => { const r = vfs.mkdir(String(args[0]), { parents: true }); return r.ok ? 0 : -1; });
@@ -483,12 +522,14 @@ function start() {
     return 0;
   });
 
-  // ── 21. SHUTDOWN HANDLER ───────────────────────────────────────────────────
+  // ── 25. SHUTDOWN HANDLER ───────────────────────────────────────────────────
   kernel.bus.on('kernel:shutdown', ({ uptime }) => {
     vfs.append('/var/log/boot.log', `[${ts()}] AIOS shutdown after ${uptime}s\n`);
     svcMgr.stopAll().catch(() => {});
     procfs.stop();
     scheduler.stop();
+    diagnostics.stop();
+    portServer.stop().catch(() => {});
     mirrorMgr.list().forEach(m => { try { mirrorMgr.unmount(m.type); } catch (_) {} });
   });
 
@@ -503,8 +544,8 @@ function start() {
     process.stderr.write(`[AIOS] Unhandled rejection: ${r}\n`);
   });
 
-  // ── 22. RUN INIT SEQUENCE ──────────────────────────────────────────────────
-  bootInit.boot().then(() => {
+  // ── 26. RUN INIT SEQUENCE + SELF-CHECK ─────────────────────────────────────
+  bootInit.boot().then(async () => {
     // Start services after init boot
     svcMgr.start('kernel-watchdog').catch(() => {});
     svcMgr.start('cpu-idle').catch(() => {});
@@ -513,8 +554,51 @@ function start() {
     svcMgr.start('procfs-updater').catch(() => {});
 
     scheduler.start();
+    diagnostics.start();
 
-    // ── 23. TERMINAL ────────────────────────────────────────────────────────
+    // ── SELF-CHECK ──────────────────────────────────────────────────────────
+    process.stdout.write('\n  \x1b[35m[SELF-CHECK]\x1b[0m  Running system self-check…\n');
+
+    // 1. Memory availability and CPU status
+    const health = diagnostics.captureHealth();
+    const memOk  = health.memory.usedPct < 95;
+    bootMsg(memOk ? 'ok' : 'warn',
+      `Self-check: memory ${health.memory.usedMB}/${health.memory.totalMB} MB (${health.memory.usedPct}% used)`);
+    bootMsg('ok', `Self-check: CPU  ${health.cpu.cores} cores  load=${health.cpu.loadAvg1}`);
+    memoryEngine.learn('self-check', { type: 'memory', ...health.memory });
+    memoryEngine.learn('self-check', { type: 'cpu',    ...health.cpu    });
+
+    // 2. Confirm port can open
+    const portCheck = await portServer.canBind();
+    if (portCheck.ok) {
+      bootMsg('ok', `Self-check: port ${portCheck.port} is available`);
+      // Start the port server now that we've confirmed it's available
+      portServer.start().catch(() => {});
+    } else {
+      bootMsg('warn', `Self-check: port ${portServer.info().port} unavailable — ${portCheck.error}`);
+    }
+    memoryEngine.learn('self-check', { type: 'port', port: portServer.info().port, ok: portCheck.ok });
+
+    // 3. Test local lightweight model (CPU self-test via AIOSCPU emulator)
+    try {
+      const cpuProg = [
+        { op: 'LOADI', dst: 0, imm: 1 },
+        { op: 'LOADI', dst: 1, imm: 1 },
+        { op: 'ADD',   dst: 2, src1: 0, src2: 1 },
+        { op: 'HALT' },
+      ];
+      const cpuResult = cpu.run(cpuProg);
+      const cpuOk = !cpuResult.error && cpuResult.regs && cpuResult.regs[2] === 2;
+      bootMsg(cpuOk ? 'ok' : 'warn',
+        `Self-check: AIOSCPU model test ${cpuOk ? 'passed' : 'failed'}  (cycles=${cpuResult.cycles})`);
+      memoryEngine.learn('self-check', { type: 'cpu-model', ok: cpuOk, cycles: cpuResult.cycles });
+    } catch (e) {
+      bootMsg('warn', `Self-check: AIOSCPU model test error — ${e.message}`);
+    }
+
+    process.stdout.write('  \x1b[35m[SELF-CHECK]\x1b[0m  Self-check complete\n');
+
+    // ── 27. TERMINAL ────────────────────────────────────────────────────────
     process.stdout.write('\n');
     bootMsg('ok', 'All systems online — AIOS is the platform — handing control to terminal\n');
 
