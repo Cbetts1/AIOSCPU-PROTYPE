@@ -65,6 +65,12 @@ const BACKUP_RULES = [
   { re: /^debug\s*(.*)$/i,              fn: (m) => `debug ${(m[1] || '').trim()}`.trim() },
   // Kernel
   { re: /^kernel\s+info$/i,             fn: ()  => 'kernel info' },
+  { re: /^kernel\s+mode$/i,             fn: ()  => 'kernel mode' },
+  { re: /^kernel\s+switch\s+(self|mirror)$/i,
+    fn: (m) => `kernel switch ${m[1]}` },
+  // Loop engine
+  { re: /^loop\s+(start|stop|status|step)$/i,
+    fn: (m) => `loop ${m[1]}` },
   // CPU demo
   { re: /^cpu\s*(demo|info|regs|reset)$/i,
     fn: (m) => `cpu ${m[1]}` },
