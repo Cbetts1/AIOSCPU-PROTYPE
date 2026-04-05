@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * aos — AIOSCPU Prototype One entry point
+ * aos — AIOSCPU OS Integration Layer entry point
  *
  * Usage (Termux / Linux / macOS):
  *   chmod +x aos
@@ -12,5 +12,8 @@
  *   npm start
  *
  * Requires: Node.js >= 14.  No external npm packages needed.
+ *
+ * Boot flow:
+ *   bootstrap.js → pivot.js → init.js → services → terminal
  */
-require('./boot/boot.js').start();
+require('./boot/bootstrap.js').start();

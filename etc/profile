@@ -1,0 +1,31 @@
+# /etc/profile — AIOS System Profile
+# Sourced by all login shells
+
+export AIOS_OS="AIOS UniKernel"
+export AIOS_VERSION="3.0.0"
+export AIOS_KERNEL="aios-unikernel"
+export HOME="/home/user"
+export USER="aios"
+export LOGNAME="aios"
+export SHELL="/bin/aios-shell"
+export TERM="${TERM:-xterm-256color}"
+export COLORTERM="truecolor"
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+export PATH="/bin:/usr/bin:/usr/local/bin"
+export PS1="aios:\w$ "
+export PS2="> "
+export EDITOR="edit"
+export PAGER="cat"
+export TMPDIR="/tmp"
+
+# XDG Base Directories
+export XDG_RUNTIME_DIR="/run/user/1000"
+export XDG_DATA_HOME="/home/user/.local/share"
+export XDG_CONFIG_HOME="/home/user/.config"
+export XDG_CACHE_HOME="/home/user/.cache"
+
+# Source user profile if present
+if [ -f /home/user/.profile ]; then
+  . /home/user/.profile
+fi
