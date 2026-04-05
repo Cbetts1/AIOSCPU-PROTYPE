@@ -45,7 +45,7 @@ info "Detected OS: ${OS}"
 if ! command -v node &>/dev/null; then
   fail "Node.js not found. Install it from https://nodejs.org/ (>= v${NODE_MIN_MAJOR})"
 fi
-NODE_MAJOR=$(node -e "process.stdout.write(String(process.version.split('.')[0].replace('v','')))" 2>/dev/null || echo "0")
+NODE_MAJOR=$(node -p "parseInt(process.version.slice(1))" 2>/dev/null || echo "0")
 if [[ "${NODE_MAJOR}" -lt "${NODE_MIN_MAJOR}" ]]; then
   fail "Node.js >= ${NODE_MIN_MAJOR} required. Found: $(node --version)"
 fi

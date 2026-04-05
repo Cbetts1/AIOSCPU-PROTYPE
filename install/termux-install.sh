@@ -44,7 +44,7 @@ pkg install -y nodejs git curl 2>/dev/null || \
   apt-get install -y nodejs git curl
 
 # ── Verify Node.js version ───────────────────────────────────
-NODE_MAJOR=$(node -e "process.stdout.write(String(process.version.split('.')[0].replace('v','')))" 2>/dev/null || echo "0")
+NODE_MAJOR=$(node -p "parseInt(process.version.slice(1))" 2>/dev/null || echo "0")
 if [[ "${NODE_MAJOR}" -lt "${NODE_MIN_MAJOR}" ]]; then
   fail "Node.js >= ${NODE_MIN_MAJOR} required. Found: $(node --version 2>/dev/null || echo 'none')"
 fi
