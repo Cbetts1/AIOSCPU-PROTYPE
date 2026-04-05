@@ -1,6 +1,6 @@
 'use strict';
 /**
- * filesystem.js — AIOS In-Memory Virtual Filesystem v1.0.0
+ * filesystem.js — AIOS In-Memory Virtual Filesystem v1.1.0
  *
  * Created for: AIOSCPU Prototype One
  * Sources drawn from: Cbetts1/Files-system, Cbetts1/Backend-file-system-
@@ -8,6 +8,12 @@
  *
  * Provides a POSIX-like in-memory VFS:
  *   mkdir, ls, cd, pwd, touch, read, write, append, rm, stat, cp, mv, tree
+ *
+ * v1.1.0 additions:
+ *   - Virtual mount table (mount, umount, getMounts)
+ *   - Atomic write (writeAtomic — write to shadow then swap)
+ *   - FS integrity check (fsck — validates tree consistency)
+ *   - Persistent layer (snapshot / restore via host FS when available)
  *
  * Paths: Unix-style absolute (/home/user) or relative (docs/notes.txt)
  * Everything lives in a JS object tree — no disk I/O, runs fully offline.
@@ -61,6 +67,9 @@ function createFilesystem() {
 
   // Current working directory (absolute path string)
   let cwd = '/';
+
+  // Virtual mount table: mountPoint -> { device, fsType, options, mountedAt }
+  const _mounts = Object.create(null);
 
   // ---------------------------------------------------------------------------
   // Internal: walk path and return the node (or null)
@@ -274,6 +283,179 @@ function createFilesystem() {
   }
 
   // ---------------------------------------------------------------------------
+  // Virtual mount table
+  // ---------------------------------------------------------------------------
+  function mount(mountPoint, device, fsType = 'vfs', options = {}) {
+    const abs = normalizePath(cwd, mountPoint);
+    // Ensure mount point directory exists
+    const node = _resolve(abs);
+    if (!node) {
+      const mkr = mkdir(mountPoint, { parents: true });
+      if (!mkr.ok) return { ok: false, error: `mount: cannot create mount point: ${mkr.error}` };
+    }
+    _mounts[abs] = { device, fsType, options, mountedAt: now() };
+    return { ok: true, mountPoint: abs, device, fsType };
+  }
+
+  function umount(mountPoint) {
+    const abs = normalizePath(cwd, mountPoint);
+    if (!_mounts[abs]) return { ok: false, error: `umount: not mounted: ${mountPoint}` };
+    delete _mounts[abs];
+    return { ok: true, mountPoint: abs };
+  }
+
+  function getMounts() {
+    return Object.entries(_mounts).map(([mp, info]) => ({ mountPoint: mp, ...info }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Atomic write — write to a shadow copy, then swap (prevents partial writes)
+  // ---------------------------------------------------------------------------
+  function writeAtomic(path, content = '') {
+    const abs = normalizePath(cwd, path);
+    const shadowPath = abs + '.__atomic_tmp__';
+    // Write to shadow
+    const wr = write(shadowPath, content);
+    if (!wr.ok) return { ok: false, error: `writeAtomic: shadow write failed: ${wr.error}` };
+    // Verify shadow is readable
+    const rr = read(shadowPath);
+    if (!rr.ok || rr.content !== String(content)) {
+      rm(shadowPath);
+      return { ok: false, error: 'writeAtomic: verification failed' };
+    }
+    // Move shadow -> target (atomic swap)
+    const mvr = mv(shadowPath, abs);
+    if (!mvr.ok) {
+      rm(shadowPath);
+      return { ok: false, error: `writeAtomic: swap failed: ${mvr.error}` };
+    }
+    const result = read(abs);
+    return { ok: true, path: abs, bytes: result.ok ? result.content.length : 0 };
+  }
+
+  // ---------------------------------------------------------------------------
+  // FS integrity check — validates tree consistency
+  // ---------------------------------------------------------------------------
+  function fsck(path = '/') {
+    const errors  = [];
+    let   checked = 0;
+
+    function _check(absPath, node) {
+      checked++;
+      if (!node || typeof node !== 'object') {
+        errors.push(`${absPath}: null or non-object node`);
+        return;
+      }
+      if (node.type !== TYPE_FILE && node.type !== TYPE_DIR) {
+        errors.push(`${absPath}: unknown type "${node.type}"`);
+        return;
+      }
+      if (typeof node.name !== 'string' || node.name === '') {
+        errors.push(`${absPath}: missing or empty name`);
+      }
+      if (typeof node.created !== 'number') {
+        errors.push(`${absPath}: missing created timestamp`);
+      }
+      if (typeof node.modified !== 'number') {
+        errors.push(`${absPath}: missing modified timestamp`);
+      }
+      if (node.type === TYPE_FILE) {
+        if (typeof node.content !== 'string') {
+          errors.push(`${absPath}: file content is not a string`);
+        }
+      } else {
+        if (!node.children || typeof node.children !== 'object') {
+          errors.push(`${absPath}: directory missing children object`);
+          return;
+        }
+        for (const [childName, childNode] of Object.entries(node.children)) {
+          if (childNode.name !== childName) {
+            errors.push(`${absPath}/${childName}: name mismatch (key="${childName}" name="${childNode.name}")`);
+          }
+          _check(`${absPath === '/' ? '' : absPath}/${childName}`, childNode);
+        }
+      }
+    }
+
+    const startNode = _resolve(normalizePath(cwd, path));
+    if (!startNode) return { ok: false, error: `fsck: path not found: ${path}`, checked: 0, errors: [] };
+
+    _check(path === '/' ? '/' : normalizePath(cwd, path), startNode);
+
+    const clean = errors.length === 0;
+    return { ok: clean, checked, errors, clean };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Persistent layer — snapshot/restore (uses host Node.js fs if available)
+  // ---------------------------------------------------------------------------
+  function _serializeNode(node) {
+    if (node.type === TYPE_FILE) {
+      return { type: TYPE_FILE, name: node.name, content: node.content, created: node.created, modified: node.modified };
+    }
+    const children = {};
+    for (const [k, v] of Object.entries(node.children)) {
+      children[k] = _serializeNode(v);
+    }
+    return { type: TYPE_DIR, name: node.name, children, created: node.created, modified: node.modified };
+  }
+
+  function _deserializeNode(data) {
+    if (!data || typeof data !== 'object') return null;
+    if (data.type === TYPE_FILE) {
+      return { type: TYPE_FILE, name: data.name, content: String(data.content || ''), created: data.created || now(), modified: data.modified || now() };
+    }
+    const children = {};
+    for (const [k, v] of Object.entries(data.children || {})) {
+      const child = _deserializeNode(v);
+      if (child) children[k] = child;
+    }
+    return { type: TYPE_DIR, name: data.name, children, created: data.created || now(), modified: data.modified || now() };
+  }
+
+  function snapshot() {
+    return JSON.stringify({ version: 1, cwd, root: _serializeNode(root) });
+  }
+
+  function restore(snapshotJson) {
+    try {
+      const data = JSON.parse(snapshotJson);
+      if (!data || data.version !== 1) return { ok: false, error: 'restore: invalid snapshot version' };
+      const newRoot = _deserializeNode(data.root);
+      if (!newRoot) return { ok: false, error: 'restore: failed to deserialize root' };
+      // Replace root contents
+      root.children  = newRoot.children;
+      root.modified  = newRoot.modified;
+      cwd = (typeof data.cwd === 'string') ? data.cwd : '/';
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `restore: ${e.message}` };
+    }
+  }
+
+  // Persist to host disk at given path (Node.js fs required)
+  function persistTo(hostPath) {
+    try {
+      const nfs = require('fs');
+      nfs.writeFileSync(hostPath, snapshot(), 'utf8');
+      return { ok: true, path: hostPath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // Load from host disk snapshot
+  function loadFrom(hostPath) {
+    try {
+      const nfs = require('fs');
+      const data = nfs.readFileSync(hostPath, 'utf8');
+      return restore(data);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Filesystem module interface (for kernel module registry)
   // ---------------------------------------------------------------------------
   const commands = {
@@ -335,6 +517,10 @@ function createFilesystem() {
     name:  'filesystem',
     // Raw API
     pwd, cd, mkdir, ls, touch, read, write, append, rm, stat, cp, mv, tree,
+    // v1.1 additions
+    writeAtomic, fsck,
+    mount, umount, getMounts,
+    snapshot, restore, persistTo, loadFrom,
     resolvePath: (p) => normalizePath(cwd, p),
     // For router module mounting
     commands,

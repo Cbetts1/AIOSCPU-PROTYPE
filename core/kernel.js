@@ -1,10 +1,16 @@
 'use strict';
 /**
- * kernel.js — AIOS Software Kernel v1.0.0
+ * kernel.js — AIOS Software Kernel v1.1.0
  *
  * Merged & adapted from: Cbetts1/Kernal-  (kernel.js)
  *                         Cbetts1/Os-layer (os.js)
  *                         Cbetts1/Os-handshake (interOS.js)
+ *
+ * v1.1.0 additions:
+ *   - Standardized ERROR_CODES table
+ *   - Module dependency graph with load-order enforcement
+ *   - Fail-fast logic (panic / assert)
+ *   - Service health-check registry
  *
  * Pure Node.js CommonJS. Zero external dependencies.
  * Compatible with: Node.js >= 14, Termux on Android.
@@ -13,11 +19,95 @@
 const crypto = require('crypto');
 
 // ---------------------------------------------------------------------------
+// Standardized error codes
+// ---------------------------------------------------------------------------
+const ERROR_CODES = Object.freeze({
+  OK:               0,
+  // General
+  E_UNKNOWN:        1,
+  E_INVALID_ARG:    2,
+  E_NOT_FOUND:      3,
+  E_PERMISSION:     4,
+  E_TIMEOUT:        5,
+  // Kernel
+  E_MODULE_LOAD:    10,
+  E_MODULE_DEP:     11,
+  E_SYSCALL:        12,
+  E_PANIC:          13,
+  // CPU
+  E_CPU_FAULT:      20,
+  E_CPU_BOUNDS:     21,
+  E_CPU_HALT:       22,
+  // Filesystem
+  E_FS_NOT_FOUND:   30,
+  E_FS_NOT_DIR:     31,
+  E_FS_NOT_FILE:    32,
+  E_FS_INTEGRITY:   33,
+  // Services
+  E_SVC_NOT_FOUND:  40,
+  E_SVC_CRASH:      41,
+  E_SVC_TIMEOUT:    42,
+  // AI
+  E_AI_OFFLINE:     50,
+  E_AI_MODEL:       51,
+  E_AI_CONTEXT:     52,
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function uid() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   return crypto.randomBytes(16).toString('hex');
+}
+
+// ---------------------------------------------------------------------------
+// DependencyGraph — tracks module load order and circular deps
+// ---------------------------------------------------------------------------
+class DependencyGraph {
+  constructor() {
+    this._deps = Object.create(null);   // name -> Set of dependency names
+    this._order = [];                   // resolved load order
+  }
+
+  /** Register a module with optional dependencies. */
+  register(name, deps = []) {
+    if (!this._deps[name]) this._deps[name] = new Set();
+    for (const d of deps) this._deps[name].add(d);
+    return this;
+  }
+
+  /** Topological sort — returns load order or throws on cycle. */
+  resolve() {
+    const visited = new Set();
+    const temp    = new Set();
+    const order   = [];
+
+    const visit = (name) => {
+      if (visited.has(name)) return;
+      if (temp.has(name)) throw new Error(`Circular dependency detected: ${name}`);
+      temp.add(name);
+      for (const dep of (this._deps[name] || [])) visit(dep);
+      temp.delete(name);
+      visited.add(name);
+      order.push(name);
+    };
+
+    for (const name of Object.keys(this._deps)) visit(name);
+    this._order = order;
+    return order;
+  }
+
+  /** Returns true when all deps for `name` have been loaded. */
+  canLoad(name, loadedSet) {
+    for (const dep of (this._deps[name] || [])) {
+      if (!loadedSet.has(dep)) return false;
+    }
+    return true;
+  }
+
+  getOrder()  { return this._order.slice(); }
+  getDeps(n)  { return Array.from(this._deps[n] || []); }
 }
 
 // ---------------------------------------------------------------------------
@@ -141,12 +231,85 @@ class ModuleRegistry {
 // Kernel factory
 // ---------------------------------------------------------------------------
 function createKernel(options = {}) {
-  const KERNEL_VERSION = '1.0.0';
+  const KERNEL_VERSION = '1.1.0';
   const kernelId = `aios-kernel-${uid().slice(0, 8)}`;
 
   const bus     = new KernelEventBus();
   const modules = new ModuleRegistry(bus);
   const procs   = new ProcessTable();
+  const depGraph = new DependencyGraph();
+
+  // Service health-check registry: name -> { interval, check(), lastStatus }
+  const _healthChecks = Object.create(null);
+  const _healthTimers = Object.create(null);
+
+  // ---------------------------------------------------------------------------
+  // Fail-fast / panic helpers
+  // ---------------------------------------------------------------------------
+  function panic(message, code = ERROR_CODES.E_PANIC) {
+    const msg = `[KERNEL PANIC] ${message} (code=${code})`;
+    bus.emit('kernel:panic', { message, code, time: Date.now() });
+    process.stderr.write(msg + '\n');
+    throw Object.assign(new Error(msg), { kernelCode: code, isPanic: true });
+  }
+
+  function assert(condition, message, code = ERROR_CODES.E_INVALID_ARG) {
+    if (!condition) panic(message, code);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Service health checks
+  // ---------------------------------------------------------------------------
+  function registerHealthCheck(name, checkFn, intervalMs = 30000) {
+    if (typeof checkFn !== 'function') throw new TypeError('checkFn must be a function');
+    _healthChecks[name] = { check: checkFn, intervalMs, lastStatus: null, lastCheck: 0 };
+    return { name };
+  }
+
+  function runHealthCheck(name) {
+    const entry = _healthChecks[name];
+    if (!entry) return { ok: false, error: `No health check registered: ${name}` };
+    try {
+      const result = entry.check();
+      entry.lastStatus = result;
+      entry.lastCheck  = Date.now();
+      bus.emit('kernel:health:check', { name, result });
+      return { ok: true, name, result };
+    } catch (e) {
+      entry.lastStatus = { healthy: false, error: e.message };
+      entry.lastCheck  = Date.now();
+      bus.emit('kernel:health:fail', { name, error: e.message });
+      return { ok: false, name, error: e.message };
+    }
+  }
+
+  function runAllHealthChecks() {
+    return Object.keys(_healthChecks).map(n => runHealthCheck(n));
+  }
+
+  function getHealthStatus() {
+    const out = {};
+    for (const [n, entry] of Object.entries(_healthChecks)) {
+      out[n] = { lastStatus: entry.lastStatus, lastCheck: entry.lastCheck };
+    }
+    return out;
+  }
+
+  function startHealthMonitoring() {
+    for (const [name, entry] of Object.entries(_healthChecks)) {
+      if (_healthTimers[name]) continue;
+      const t = setInterval(() => runHealthCheck(name), entry.intervalMs);
+      if (t.unref) t.unref();
+      _healthTimers[name] = t;
+    }
+  }
+
+  function stopHealthMonitoring() {
+    for (const [name, t] of Object.entries(_healthTimers)) {
+      clearInterval(t);
+      delete _healthTimers[name];
+    }
+  }
 
   // Syscall dispatch table — augmented by cpu.js and other modules
   const _syscalls = Object.create(null);
@@ -215,16 +378,28 @@ function createKernel(options = {}) {
   return {
     id:             kernelId,
     version:        KERNEL_VERSION,
+    ERROR_CODES,
     bus,
     modules,
     procs,
+    depGraph,
     boot,
     shutdown,
     uptime,
     syscall,
     registerSyscall,
     isBooted:       () => _booted,
+    // Fail-fast
+    panic,
+    assert,
+    // Health checks
+    registerHealthCheck,
+    runHealthCheck,
+    runAllHealthChecks,
+    getHealthStatus,
+    startHealthMonitoring,
+    stopHealthMonitoring,
   };
 }
 
-module.exports = { createKernel };
+module.exports = { createKernel, ERROR_CODES };
