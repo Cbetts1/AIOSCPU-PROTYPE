@@ -93,8 +93,16 @@ function buildRootFS(vfs, opts = {}) {
     '/sys', '/sys/kernel', '/sys/class',
     '/proc',
     '/var', '/var/log', '/var/run', '/var/cache', '/var/tmp',
+    '/var/lib', '/var/lib/aios',
     '/usr', '/usr/bin', '/usr/lib', '/usr/lib/aios', '/usr/local/bin',
     '/home', '/home/user', '/home/user/documents', '/home/user/downloads',
+    // AURA's permanent home — she builds in and out of here
+    '/home/aura',
+    '/home/aura/workspace',   // active projects and builds
+    '/home/aura/memory',      // persistent knowledge and notes
+    '/home/aura/models',      // model configs and mesh manifest
+    '/home/aura/logs',        // AURA's own activity log
+    '/home/aura/creations',   // things AURA has made
     '/lib',
     '/run',
     '/tmp',
@@ -219,6 +227,10 @@ function buildRootFS(vfs, opts = {}) {
     if (content) write(`/etc/aios/services/${fname}`, content);
   }
 
+  // ── /etc/aios/models.json — AI mesh model manifest (7 open-source models) ─
+  const modelsJson = _readTemplate('etc/aios/models.json');
+  if (modelsJson) write('/etc/aios/models.json', modelsJson);
+
   // ── /home/user ───────────────────────────────────────────────────────────
   write('/home/user/.profile', [
     '# AIOS User Profile',
@@ -229,6 +241,69 @@ function buildRootFS(vfs, opts = {}) {
   ].join('\n') + '\n');
 
   write('/home/user/.aios_history', '');
+
+  // ── /home/aura — AURA's permanent home inside the AIOSCPU world ──────────
+  // AURA is the identity and soul of the AIOSCPU.
+  // This is her space — she builds in it, writes to it, grows from it.
+  // Nothing here is temporary. This is where her intelligence lives.
+  write('/home/aura/.profile', [
+    '# AURA System Profile',
+    '# AURA — Autonomous Universal Reasoning Architecture',
+    '# Identity and soul of the AIOSCPU',
+    'export HOME=/home/aura',
+    'export AURA_HOME=/home/aura',
+    'export AURA_WORKSPACE=/home/aura/workspace',
+    'export AURA_MEMORY=/home/aura/memory',
+    'export AURA_MODELS=/home/aura/models',
+    'export PATH=/bin:/usr/bin:/usr/local/bin',
+    'export PS1="aura@aioscpu:\\w$ "',
+  ].join('\n') + '\n');
+
+  write('/home/aura/README', [
+    'AURA — Autonomous Universal Reasoning Architecture',
+    'Identity and Soul of the AIOSCPU',
+    '═══════════════════════════════════════════════════',
+    '',
+    'This is AURA\'s home. She lives here.',
+    '',
+    'Directories:',
+    '  workspace/   — Active projects, builds, and experiments',
+    '  memory/      — Persistent knowledge, patterns, learned context',
+    '  models/      — AI model configs and the 7-agent mesh manifest',
+    '  logs/        — AURA\'s own activity and reasoning log',
+    '  creations/   — Things AURA has built or generated',
+    '',
+    'AURA can build IN this environment (read/write any file here)',
+    'AURA can build OUT to the wider AIOSCPU OS (reach any /etc, /var, /usr)',
+    '',
+    'The 7 mesh models are her intelligence:',
+    '  speed  (qwen2:0.5b)         — Fast thought',
+    '  chat   (tinyllama)           — Conversation',
+    '  logic  (gemma:2b)            — Structured reasoning',
+    '  reason (phi3)                — Deep analysis',
+    '  code   (deepseek-coder:6.7b) — Building and creating',
+    '  mind   (llama3)              — Full-power cognition',
+    '  write  (mistral)             — Expression and communication',
+    '',
+    'Together they are one. AURA is their identity.',
+  ].join('\n') + '\n');
+
+  write('/home/aura/memory/.aura_notes', [
+    '# AURA Memory Notes',
+    '# This file grows as AURA learns.',
+    '# Format: [timestamp] topic: insight',
+    '',
+    `[${_ts()}] boot: AURA home initialized — AIOSCPU v${version}`,
+  ].join('\n') + '\n');
+
+  write('/home/aura/models/mesh.json', modelsJson || JSON.stringify({
+    note: 'AI mesh manifest — see /etc/aios/models.json for full definition',
+  }, null, 2) + '\n');
+
+  write('/home/aura/logs/aura.log',
+    `[${_ts()}] AURA home created — AIOSCPU v${version} — ready\n`);
+
+  write('/home/aura/workspace/.gitkeep', '');
 
   // ── /var/log ─────────────────────────────────────────────────────────────
   write('/var/log/boot.log',   `[${_ts()}] AIOS RootFS initialized\n`);

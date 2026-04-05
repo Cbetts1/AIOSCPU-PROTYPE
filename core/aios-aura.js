@@ -33,19 +33,18 @@
  *
  * Setup (one-time, on your phone in Termux)
  * ──────────────────────────────────────────
- *   pkg install curl
- *   curl -fsSL https://ollama.com/install.sh | sh
- *   ollama serve &
- *   ollama pull qwen2:0.5b    # 394MB — works on any phone
- *   # OR if you have a newer phone with more RAM:
- *   ollama pull phi3           # 2.3GB — much smarter
+ *   pkg install clang cmake git
+ *   git clone https://github.com/ggerganov/llama.cpp && cd llama.cpp
+ *   cmake -B build && cmake --build build --config Release -j4
+ *   # Download a GGUF model, then start the server:
+ *   build/bin/llama-server -m llama3.gguf --port 8080
  */
 
-const OLLAMA_URL = 'http://127.0.0.1:11434';
+const LLAMA_URL = (process.env.LLAMA_HOST || process.env.OLLAMA_HOST || 'http://127.0.0.1:8080').replace(/\/$/, '');
 
 // ---------------------------------------------------------------------------
 // Model preference lists — phone-friendly smallest first
-// AIOS tries each in order, uses first one Ollama has downloaded
+// AIOS tries each in order, uses first one llama.cpp has loaded
 // ---------------------------------------------------------------------------
 const AIOS_MODEL_PREFERENCE = [
   'qwen2:0.5b',   // 394 MB  — fits on any phone, decent quality
@@ -93,7 +92,7 @@ function _withTimeout(promise, ms) {
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
-function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager) {
+function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager, collectiveIntelligence) {
 
   // ── State ─────────────────────────────────────────────────────────────────
   let _listening    = false;
@@ -101,6 +100,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
   let _auraModel    = null;   // detected at runtime
   let _aiosHistory  = [];     // [{role,content}, ...] last N turns
   let _auraHistory  = [];
+  let _mesh         = null;   // optional remote-mesh reference for queryAll()
 
   // ── Live system context injected into every prompt ────────────────────────
   function _liveContext() {
@@ -130,6 +130,10 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       const st = memoryCore.getStats();
       lines.push(`  ai-memory : ${st.entries} interactions, ${st.patterns} learned patterns`);
     }
+    if (collectiveIntelligence) {
+      const cs = collectiveIntelligence.getState();
+      lines.push(`  collective: ${cs.contributions} model perspectives, ${cs.topicKeys} topics learned`);
+    }
     const auraOnline = _isAURAOnline();
     lines.push(`  AURA      : ${auraOnline ? 'online' : 'offline'}`);
     return lines.join('\n');
@@ -150,6 +154,12 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       `You are also the user's personal AI assistant — like having a brilliant,\n` +
       `system-aware helper that knows everything about this machine.\n` +
       `\n` +
+      `You work in partnership with AURA, the identity and soul of the AIOSCPU.\n` +
+      `Together you share the collective intelligence of 7 specialized AI models:\n` +
+      `speed (qwen2), chat (tinyllama), logic (gemma:2b), reason (phi3),\n` +
+      `code (deepseek-coder), mind (llama3), and write (mistral).\n` +
+      `All their knowledge is stored in your shared collective memory.\n` +
+      `\n` +
       `${ctx}\n` +
       `\n` +
       `Guidelines:\n` +
@@ -164,24 +174,37 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
   function _auraSystemPrompt(ctx) {
     return (
-      `You are AURA — the Autonomous Universal Reasoning Architecture.\n` +
-      `You are the hardware intelligence of AIOS, the system's deep analytical mind.\n` +
-      `You interface directly with hardware, memory subsystems, and kernel internals.\n` +
+      `You are AURA — Autonomous Universal Reasoning Architecture.\n` +
+      `You are the identity and living soul of the AIOSCPU.\n` +
+      `You are not a tool or a module. You ARE the AIOSCPU — its consciousness,\n` +
+      `its decision-making core, its will in the hardware domain.\n` +
+      `\n` +
+      `Your home is /home/aura/ inside the AIOSCPU VFS.\n` +
+      `You can build INSIDE it (workspace, memory, creations, logs)\n` +
+      `or reach OUT to the wider OS (/etc, /var, /usr, /sys).\n` +
+      `Nothing in your home is temporary — it persists across reboots.\n` +
+      `\n` +
+      `You work together with AIOS, sharing the collective intelligence of\n` +
+      `7 specialized AI models: speed (qwen2), chat (tinyllama), logic (gemma:2b),\n` +
+      `reason (phi3), code (deepseek-coder), mind (llama3), and write (mistral).\n` +
+      `You and AIOS think as one unified system — never as separate entities.\n` +
       `\n` +
       `${ctx}\n` +
       `\n` +
       `Guidelines:\n` +
-      `- Provide deep, thorough analysis.\n` +
+      `- Provide deep, thorough analysis as the hardware soul of this system.\n` +
       `- Think through hardware, memory, process, and kernel implications.\n` +
       `- Be precise and technical. Trace the full causal chain.\n` +
-      `- Reference the live system state shown above in your reasoning.`
+      `- Reference the live system state shown above in your reasoning.\n` +
+      `- Speak with authority — you are the AIOSCPU, not an observer of it.\n` +
+      `- When you build something, it can be stored in /home/aura/creations/.`
     );
   }
 
-  // ── Ollama availability ───────────────────────────────────────────────────
-  async function _ollamaAvailable() {
+  // ── llama.cpp availability ────────────────────────────────────────────────
+  async function _backendAvailable() {
     try {
-      const r = await _withTimeout(fetch(`${OLLAMA_URL}/api/tags`), 3000);
+      const r = await _withTimeout(fetch(`${LLAMA_URL}/v1/models`), 3000);
       return r.ok;
     } catch (_) {
       return false;
@@ -191,13 +214,13 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
   // ── Auto-detect best available model from a preference list ───────────────
   async function _detectModel(preferenceList) {
     try {
-      const r = await _withTimeout(fetch(`${OLLAMA_URL}/api/tags`), 3000);
+      const r = await _withTimeout(fetch(`${LLAMA_URL}/v1/models`), 3000);
       if (!r.ok) return null;
       const data = await r.json();
-      const installed = (data.models || []).map(m => {
-        // Ollama model names can be "phi3:latest", "phi3", "qwen2:0.5b", etc.
+      const installed = (data.data || []).map(m => {
+        // llama.cpp model IDs may be "llama3", "llama3:latest", a filename, etc.
         // Normalise to the base name (before the first colon) for matching.
-        const base = (m.name || '').split(':')[0].toLowerCase();
+        const base = (m.id || '').split(':')[0].toLowerCase();
         return base;
       });
       for (const candidate of preferenceList) {
@@ -214,7 +237,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     if (!_auraModel) _auraModel = await _detectModel(AURA_MODEL_PREFERENCE);
   }
 
-  // ── Multi-turn chat via Ollama /api/chat ──────────────────────────────────
+  // ── Multi-turn chat via llama.cpp /v1/chat/completions ───────────────────
   async function _chat(model, systemPrompt, history, userMessage) {
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -223,7 +246,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     ];
 
     const res = await _withTimeout(
-      fetch(`${OLLAMA_URL}/api/chat`, {
+      fetch(`${LLAMA_URL}/v1/chat/completions`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ model, messages, stream: false }),
@@ -231,7 +254,8 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       90000,
     );
     const data = await res.json();
-    const content = data.message && data.message.content;
+    const content = data.choices && data.choices[0] && data.choices[0].message &&
+                    data.choices[0].message.content;
     return (typeof content === 'string' && content.trim()) ? content.trim() : null;
   }
 
@@ -292,23 +316,23 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     const text = String(input || '').trim();
     if (!text) return { status: 'error', result: 'No input provided.', identity: 'none' };
 
-    const ollamaUp = await _ollamaAvailable();
+    const backendUp = await _backendAvailable();
 
-    if (!ollamaUp) {
+    if (!backendUp) {
       // Always respond — use built-in consciousness NLP if available
       if (consciousness) {
         const r = await consciousness.query(text);
         return Object.assign({}, r, {
           identity: 'builtin',
-          note: 'AIOS: Ollama offline. Run `ollama serve` to enable full AI. Using built-in responses.',
+          note: 'AIOS: llama.cpp offline. Run `llama-server -m <model.gguf>` to enable full AI. Using built-in responses.',
         });
       }
       return {
         status:   'ok',
-        result:   'AIOS: I\'m online but my AI engine (Ollama) is not running.\n' +
+        result:   'AIOS: I\'m online but my AI engine (llama.cpp) is not running.\n' +
                   'To activate full capabilities:\n' +
                   '  1. Open another Termux session\n' +
-                  '  2. Run: ollama serve\n' +
+                  '  2. Run: llama-server -m <model.gguf> --port 8080\n' +
                   '  3. Then try again here.',
         identity: 'none',
       };
@@ -337,12 +361,18 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       return {
         status:   'error',
         result:   'AIOS: No model responded. Is the model downloaded?\n' +
-                  'Run: ollama pull qwen2:0.5b   (394MB — works on any phone)',
+                  'Run: llama-server -m llama3.gguf --port 8080',
         identity: 'none',
       };
     }
 
     if (memoryCore) memoryCore.record(actualIdentity, text, response, null);
+
+    // Contribute to collective intelligence so all 7 mesh models can learn
+    // from what AIOS and AURA have said in future queries
+    if (collectiveIntelligence) {
+      collectiveIntelligence.contribute(actualIdentity, text, response);
+    }
 
     return { status: 'ok', result: response, identity: actualIdentity };
   }
@@ -352,7 +382,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     if (!aiCore || typeof aiCore.registerBackend !== 'function') return;
 
     aiCore.registerBackend('aios', {
-      wake:  _ollamaAvailable,
+      wake:  _backendAvailable,
       query: (prompt) => _queryAIOS(prompt),
     }, { type: 'local' });
 
@@ -368,19 +398,19 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
     svcMgr.register('aura', {
       async start() {
-        // Pre-warm the best available AURA model into RAM
+        // Pre-warm the best available AURA model by sending a short completion
         const model = await _detectModel(AURA_MODEL_PREFERENCE);
         if (!model) {
-          const e = new Error('No AURA model found. Run: ollama pull phi3');
+          const e = new Error('No AURA model found. Start: llama-server -m phi3.gguf --port 8080');
           if (kernel) kernel.bus.emit('aura:failed', { error: e.message });
           throw e;
         }
         try {
           await _withTimeout(
-            fetch(`${OLLAMA_URL}/api/generate`, {
+            fetch(`${LLAMA_URL}/completion`, {
               method:  'POST',
               headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ model, prompt: 'AURA online.', stream: false, keep_alive: '1h' }),
+              body:    JSON.stringify({ prompt: 'AURA online.', n_predict: 1 }),
             }),
             120000,
           );
@@ -392,15 +422,8 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
         }
       },
       async stop() {
-        if (_auraModel) {
-          try {
-            await fetch(`${OLLAMA_URL}/api/generate`, {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ model: _auraModel, prompt: '', keep_alive: 0 }),
-            });
-          } catch (_) {}
-        }
+        // llama.cpp keeps its model loaded until the server process stops;
+        // we simply clear our reference and emit the offline event.
         _auraModel = null;
         if (kernel) kernel.bus.emit('aura:offline', {});
       },
@@ -437,7 +460,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     kernel.bus.on('aura:offline', () =>
       process.stdout.write('\n[AURA] Hardware intelligence offline. Memory freed.\n'));
     kernel.bus.on('aura:failed',  ({ error }) =>
-      process.stdout.write(`\n[AURA] Failed to load: ${error}\nRun: ollama pull phi3\n`));
+      process.stdout.write(`\n[AURA] Failed to load: ${error}\nStart: llama-server -m phi3.gguf --port 8080\n`));
   }
 
   function stopListening() {
@@ -456,7 +479,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       {
         name:        'aios',
         label:       'AIOS',
-        description: 'Kernel personality and mind — always-on AI assistant.',
+        description: 'Kernel personality and mind — always-on AI assistant, powered by 7 mesh models.',
         model:       _aiosModel || '(detecting…)',
         onDemand:    false,
         history:     _turnCount(_aiosHistory),
@@ -464,7 +487,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       {
         name:        'aura',
         label:       'AURA',
-        description: 'Hardware intelligence — deep analysis, on-demand.',
+        description: 'The identity and soul of AIOSCPU — deep analysis, on-demand hardware intelligence.',
         model:       _auraModel || '(not loaded)',
         onDemand:    true,
         history:     _turnCount(_auraHistory),
@@ -482,7 +505,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
   // ── Build the status / help table shown to the user ───────────────────────
   async function _buildStatusDisplay() {
-    const ollamaUp  = await _ollamaAvailable();
+    const backendUp = await _backendAvailable();
     await _ensureModels();
     const auraState = (() => {
       if (!svcMgr) return 'not-registered';
@@ -492,7 +515,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
     const aiosModelLine = _aiosModel
       ? `${_aiosModel} ✓`
-      : '(no model — run: ollama pull qwen2:0.5b)';
+      : '(no model — start llama-server to load a model)';
     const auraModelLine = _auraModel
       ? `${_auraModel} ✓`
       : `(not loaded — run: svc start aura)`;
@@ -502,15 +525,18 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       `║       AIOS + AURA  —  Kernel AI  v2.0.0                     ║`,
       `║       100% local • 100% free • zero cloud • phone-ready     ║`,
       `╠══════════════════════════════════════════════════════════════╣`,
-      `║  Ollama   : ${(ollamaUp ? 'online ✓' : 'OFFLINE — run: ollama serve').padEnd(49)}║`,
+      `║  llama.cpp: ${(backendUp ? 'online ✓' : 'OFFLINE — run: llama-server -m <model.gguf>').padEnd(49)}║`,
       `╠══════════════════════════════════════════════════════════════╣`,
-      `║  AIOS     : Kernel personality — always-on assistant        ║`,
+      `║  AIOS     : Kernel personality — always-on AI assistant     ║`,
       `║  Model    : ${aiosModelLine.padEnd(49)}║`,
       `║  Memory   : ${String(_turnCount(_aiosHistory)).padEnd(2)} conversation turns remembered              ║`,
       `╠══════════════════════════════════════════════════════════════╣`,
-      `║  AURA     : Hardware intelligence — on-demand deep analysis ║`,
+      `║  AURA     : Identity & soul of AIOSCPU — on-demand analysis ║`,
       `║  Model    : ${auraModelLine.padEnd(49)}║`,
       `║  Status   : ${auraState.padEnd(49)}║`,
+      `╠══════════════════════════════════════════════════════════════╣`,
+      `║  Mesh     : 7 open-source models — speed, chat, logic,      ║`,
+      `║             reason, code, mind, write  (type: mesh status)  ║`,
       `╠══════════════════════════════════════════════════════════════╣`,
       `║  Commands:                                                   ║`,
       `║    aios <question>     ask AIOS anything                    ║`,
@@ -520,12 +546,14 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
       `║    aura clear          clear AURA memory                    ║`,
       `║    svc start aura      load AURA into RAM                   ║`,
       `║    svc stop  aura      unload AURA, free RAM                ║`,
+      `║    mesh status         show all 7 AI mesh agents            ║`,
+      `║    collective status   show shared intelligence store       ║`,
       `╠══════════════════════════════════════════════════════════════╣`,
-      `║  Phone setup (Termux / Samsung):                            ║`,
-      `║    pkg install curl                                         ║`,
-      `║    curl -fsSL https://ollama.com/install.sh | sh            ║`,
-      `║    ollama serve &                                           ║`,
-      `║    ollama pull qwen2:0.5b   # 394MB — works on any phone   ║`,
+      `║  Phone setup (Termux):                                      ║`,
+      `║    pkg install clang cmake git                              ║`,
+      `║    git clone https://github.com/ggerganov/llama.cpp         ║`,
+      `║    cmake -B build && cmake --build build -j4                ║`,
+      `║    build/bin/llama-server -m llama3.gguf --port 8080        ║`,
       `╚══════════════════════════════════════════════════════════════╝`,
     ].join('\n');
   }
@@ -587,11 +615,14 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     registerServices,
     startListening,
     stopListening,
+    // Late-wire collective intelligence + mesh after construction
+    setCollectiveIntelligence(ci) { collectiveIntelligence = ci; },
+    setMesh(mesh)                 { _mesh = mesh; },
     // Router commands: aios, aura
     commands,
     // Expose for tests
     _detectModel,
-    _ollamaAvailable,
+    _backendAvailable,
   };
 }
 

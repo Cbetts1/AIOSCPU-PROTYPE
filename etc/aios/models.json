@@ -1,0 +1,81 @@
+{
+  "version": "1.0.0",
+  "description": "AIOS AI Mesh — 7 open-source models wired as one brain. All free. No API keys. No cloud.",
+  "llamaHost": "http://127.0.0.1:8080",
+  "note": "Set LLAMA_HOST env var to point at a home server/PC so your phone stays light.",
+  "agents": [
+    {
+      "name":      "speed",
+      "model":     "qwen2:0.5b",
+      "role":      "Speed Agent",
+      "size":      "394MB",
+      "specialty": "Fast replies, lightweight queries — fits any phone",
+      "gguf":      "qwen2-0_5b-instruct-q4_k_m.gguf"
+    },
+    {
+      "name":      "chat",
+      "model":     "tinyllama",
+      "role":      "Chat Agent",
+      "size":      "637MB",
+      "specialty": "Friendly conversation, general help, everyday questions",
+      "gguf":      "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+    },
+    {
+      "name":      "logic",
+      "model":     "gemma:2b",
+      "role":      "Logic Agent",
+      "size":      "1.4GB",
+      "specialty": "Step-by-step reasoning, comparisons, if/then analysis",
+      "gguf":      "gemma-2b-it-q4_k_m.gguf"
+    },
+    {
+      "name":      "reason",
+      "model":     "phi3",
+      "role":      "Reason Agent",
+      "size":      "2.3GB",
+      "specialty": "Deep analysis, cause/effect, why/how questions",
+      "gguf":      "Phi-3-mini-4k-instruct-q4.gguf"
+    },
+    {
+      "name":      "code",
+      "model":     "deepseek-coder:6.7b",
+      "role":      "Code Agent",
+      "size":      "3.8GB",
+      "specialty": "Code generation, debugging, scripts, refactoring",
+      "gguf":      "deepseek-coder-6.7b-instruct.Q4_K_M.gguf"
+    },
+    {
+      "name":      "mind",
+      "model":     "llama3",
+      "role":      "Mind Agent",
+      "size":      "4.7GB",
+      "specialty": "Full-power reasoning, research, complex multi-step problems",
+      "gguf":      "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
+    },
+    {
+      "name":      "write",
+      "model":     "mistral",
+      "role":      "Write Agent",
+      "size":      "4.1GB",
+      "specialty": "Writing, summarizing, explanations, documentation",
+      "gguf":      "mistral-7b-instruct-v0.2.Q4_K_M.gguf"
+    }
+  ],
+  "setup": [
+    "# Build llama.cpp (one-time, in Termux):",
+    "pkg install clang cmake git",
+    "git clone https://github.com/ggerganov/llama.cpp && cd llama.cpp",
+    "cmake -B build && cmake --build build --config Release -j4",
+    "",
+    "# Download a GGUF model (start small — llama3 is the recommended all-rounder):",
+    "# From https://huggingface.co — search the model name + GGUF",
+    "# e.g.: huggingface-cli download bartowski/Meta-Llama-3-8B-Instruct-GGUF \\",
+    "#         Meta-Llama-3-8B-Instruct-Q4_K_M.gguf --local-dir .",
+    "",
+    "# Start the server (one model at a time):",
+    "build/bin/llama-server -m Meta-Llama-3-8B-Instruct-Q4_K_M.gguf --port 8080",
+    "",
+    "# To offload all compute to a home server/PC (phone stays ultra-light):",
+    "export LLAMA_HOST=http://192.168.1.100:8080"
+  ]
+}
