@@ -216,6 +216,32 @@ function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
     };
   }
 
+  /** Return basic info about the port server (port, version). */
+  function info() {
+    return {
+      port:    _port,
+      version: '1.0.0',
+      started: _started,
+    };
+  }
+
+  /**
+   * Test whether the configured port is available to bind.
+   * Creates a temporary server, attempts to listen, then closes it.
+   * @returns {Promise<{ ok: boolean, port: number, error?: string }>}
+   */
+  function canBind() {
+    return new Promise((resolve) => {
+      const testServer = http.createServer();
+      testServer.once('error', (e) => {
+        resolve({ ok: false, port: _port, error: e.message });
+      });
+      testServer.listen(_port, '127.0.0.1', () => {
+        testServer.close(() => resolve({ ok: true, port: _port }));
+      });
+    });
+  }
+
   // ── Router command interface ───────────────────────────────────────────────
 
   const commands = {
@@ -262,6 +288,8 @@ function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
     start,
     stop,
     status,
+    info,
+    canBind,
     commands,
   };
 }
