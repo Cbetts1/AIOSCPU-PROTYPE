@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "description": "AIOS AI Mesh — 7 open-source models wired as one brain. All free. No API keys. No cloud.",
-  "ollamaHost": "http://127.0.0.1:11434",
-  "note": "Set OLLAMA_HOST env var to point at a home server/PC so your phone stays light.",
+  "llamaHost": "http://127.0.0.1:8080",
+  "note": "Set LLAMA_HOST env var to point at a home server/PC so your phone stays light.",
   "agents": [
     {
       "name":      "speed",
@@ -10,7 +10,7 @@
       "role":      "Speed Agent",
       "size":      "394MB",
       "specialty": "Fast replies, lightweight queries — fits any phone",
-      "pull":      "ollama pull qwen2:0.5b"
+      "gguf":      "qwen2-0_5b-instruct-q4_k_m.gguf"
     },
     {
       "name":      "chat",
@@ -18,7 +18,7 @@
       "role":      "Chat Agent",
       "size":      "637MB",
       "specialty": "Friendly conversation, general help, everyday questions",
-      "pull":      "ollama pull tinyllama"
+      "gguf":      "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
     },
     {
       "name":      "logic",
@@ -26,7 +26,7 @@
       "role":      "Logic Agent",
       "size":      "1.4GB",
       "specialty": "Step-by-step reasoning, comparisons, if/then analysis",
-      "pull":      "ollama pull gemma:2b"
+      "gguf":      "gemma-2b-it-q4_k_m.gguf"
     },
     {
       "name":      "reason",
@@ -34,7 +34,7 @@
       "role":      "Reason Agent",
       "size":      "2.3GB",
       "specialty": "Deep analysis, cause/effect, why/how questions",
-      "pull":      "ollama pull phi3"
+      "gguf":      "Phi-3-mini-4k-instruct-q4.gguf"
     },
     {
       "name":      "code",
@@ -42,7 +42,7 @@
       "role":      "Code Agent",
       "size":      "3.8GB",
       "specialty": "Code generation, debugging, scripts, refactoring",
-      "pull":      "ollama pull deepseek-coder:6.7b"
+      "gguf":      "deepseek-coder-6.7b-instruct.Q4_K_M.gguf"
     },
     {
       "name":      "mind",
@@ -50,7 +50,7 @@
       "role":      "Mind Agent",
       "size":      "4.7GB",
       "specialty": "Full-power reasoning, research, complex multi-step problems",
-      "pull":      "ollama pull llama3"
+      "gguf":      "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
     },
     {
       "name":      "write",
@@ -58,25 +58,24 @@
       "role":      "Write Agent",
       "size":      "4.1GB",
       "specialty": "Writing, summarizing, explanations, documentation",
-      "pull":      "ollama pull mistral"
+      "gguf":      "mistral-7b-instruct-v0.2.Q4_K_M.gguf"
     }
   ],
   "setup": [
-    "# Install Ollama (one-time):",
-    "pkg install curl",
-    "curl -fsSL https://ollama.com/install.sh | sh",
-    "ollama serve &",
+    "# Build llama.cpp (one-time, in Termux):",
+    "pkg install clang cmake git",
+    "git clone https://github.com/ggerganov/llama.cpp && cd llama.cpp",
+    "cmake -B build && cmake --build build --config Release -j4",
     "",
-    "# Pull models (start with the small ones, add more as space allows):",
-    "ollama pull qwen2:0.5b          # 394MB — start here",
-    "ollama pull tinyllama           # 637MB",
-    "ollama pull gemma:2b            # 1.4GB",
-    "ollama pull phi3                # 2.3GB",
-    "ollama pull deepseek-coder:6.7b # 3.8GB",
-    "ollama pull llama3              # 4.7GB",
-    "ollama pull mistral             # 4.1GB",
+    "# Download a GGUF model (start small — llama3 is the recommended all-rounder):",
+    "# From https://huggingface.co — search the model name + GGUF",
+    "# e.g.: huggingface-cli download bartowski/Meta-Llama-3-8B-Instruct-GGUF \\",
+    "#         Meta-Llama-3-8B-Instruct-Q4_K_M.gguf --local-dir .",
+    "",
+    "# Start the server (one model at a time):",
+    "build/bin/llama-server -m Meta-Llama-3-8B-Instruct-Q4_K_M.gguf --port 8080",
     "",
     "# To offload all compute to a home server/PC (phone stays ultra-light):",
-    "export OLLAMA_HOST=http://192.168.1.100:11434"
+    "export LLAMA_HOST=http://192.168.1.100:8080"
   ]
 }

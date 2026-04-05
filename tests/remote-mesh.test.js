@@ -19,19 +19,19 @@ function makeKernel() {
   return k;
 }
 
-/** A minimal Ollama /api/tags response listing the given model base names. */
+/** A minimal llama.cpp /v1/models response listing the given model IDs. */
 function tagsResponse(modelNames) {
   return {
     ok:   true,
-    json: async () => ({ models: modelNames.map(n => ({ name: n })) }),
+    json: async () => ({ data: modelNames.map(n => ({ id: n })) }),
   };
 }
 
-/** A successful Ollama /api/chat response returning the given text. */
+/** A successful llama.cpp /v1/chat/completions response returning the given text. */
 function chatResponse(text) {
   return {
     ok:   true,
-    json: async () => ({ message: { content: text } }),
+    json: async () => ({ choices: [{ message: { content: text } }] }),
   };
 }
 
@@ -77,18 +77,18 @@ describe('RemoteMesh', () => {
       expect(() => createRemoteMesh(null, null)).not.toThrow();
     });
 
-    test('OLLAMA_HOST defaults to localhost', () => {
+    test('LLAMA_HOST defaults to localhost:8080', () => {
       const mesh = createRemoteMesh(kernel, null);
-      expect(mesh.status().ollamaHost).toMatch(/127\.0\.0\.1:11434/);
+      expect(mesh.status().llamaHost).toMatch(/127\.0\.0\.1:8080/);
     });
 
-    test('OLLAMA_HOST respects OLLAMA_HOST env var', () => {
-      const original = process.env.OLLAMA_HOST;
-      process.env.OLLAMA_HOST = 'http://192.168.1.50:11434';
+    test('LLAMA_HOST respects LLAMA_HOST env var', () => {
+      const original = process.env.LLAMA_HOST;
+      process.env.LLAMA_HOST = 'http://192.168.1.50:8080';
       const mesh = createRemoteMesh(kernel, null);
-      expect(mesh.status().ollamaHost).toBe('http://192.168.1.50:11434');
-      if (original === undefined) delete process.env.OLLAMA_HOST;
-      else process.env.OLLAMA_HOST = original;
+      expect(mesh.status().llamaHost).toBe('http://192.168.1.50:8080');
+      if (original === undefined) delete process.env.LLAMA_HOST;
+      else process.env.LLAMA_HOST = original;
     });
   });
 
@@ -155,13 +155,13 @@ describe('RemoteMesh', () => {
       });
     });
 
-    test('mesh help mentions OLLAMA_HOST', async () => {
+    test('mesh help mentions LLAMA_HOST', async () => {
       const mesh = createRemoteMesh(kernel, null);
       const r = await mesh.commands.mesh(['help']);
-      expect(r.result).toMatch(/OLLAMA_HOST/);
+      expect(r.result).toMatch(/LLAMA_HOST/);
     });
 
-    test('mesh status shows 0/7 when Ollama is offline', async () => {
+    test('mesh status shows 0/7 when llama.cpp is offline', async () => {
       fetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
       const mesh = createRemoteMesh(kernel, null);
       const r = await mesh.commands.mesh(['status']);
@@ -190,11 +190,11 @@ describe('RemoteMesh', () => {
       expect(r.result).toMatch(/7\/7 agents online/);
     });
 
-    test('mesh status shows ollamaHost URL', async () => {
+    test('mesh status shows llamaHost URL', async () => {
       fetch.mockRejectedValueOnce(new Error('offline'));
       const mesh = createRemoteMesh(kernel, null);
       const r = await mesh.commands.mesh(['status']);
-      expect(r.result).toMatch(/127\.0\.0\.1:11434/);
+      expect(r.result).toMatch(/127\.0\.0\.1:8080/);
     });
 
     test('mesh refresh re-discovers and reports count', async () => {
@@ -466,7 +466,7 @@ describe('RemoteMesh', () => {
     test('collective context is injected into query prompt after wiring', async () => {
       const capturedBodies = [];
       fetch.mockImplementation((url, opts) => {
-        if (url.includes('/api/tags')) return Promise.resolve(tagsResponse(['qwen2:0.5b']));
+        if (url.includes('/v1/models')) return Promise.resolve(tagsResponse(['qwen2:0.5b']));
         if (opts && opts.body) capturedBodies.push(JSON.parse(opts.body));
         return Promise.resolve(chatResponse('with context'));
       });

@@ -69,22 +69,27 @@ function makeModeManager() {
 // ---------------------------------------------------------------------------
 // Fetch mock builders
 // ---------------------------------------------------------------------------
-function mockOllamaOnline(models, chatReply) {
+function mockBackendOnline(models, chatReply) {
   global.fetch = jest.fn((url, opts) => {
-    if (url.includes('/api/tags')) {
-      return Promise.resolve({ ok: true, json: async () => ({ models: models || [] }) });
+    if (url.includes('/v1/models')) {
+      // Accept both {id} (llama.cpp format) and legacy {name} (Ollama format)
+      const data = (models || []).map(m => ({ id: m.id || m.name || '' }));
+      return Promise.resolve({ ok: true, json: async () => ({ data }) });
     }
-    if (url.includes('/api/chat')) {
+    if (url.includes('/v1/chat/completions')) {
       const body = opts && opts.body ? JSON.parse(opts.body) : {};
       const reply = typeof chatReply === 'function' ? chatReply(body) : (chatReply || 'AIOS response');
-      return Promise.resolve({ ok: true, json: async () => ({ message: { role: 'assistant', content: reply } }) });
+      return Promise.resolve({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: reply } }] }) });
     }
-    if (url.includes('/api/generate')) {
-      return Promise.resolve({ ok: true, json: async () => ({ response: 'ok' }) });
+    if (url.includes('/completion')) {
+      return Promise.resolve({ ok: true, json: async () => ({ content: 'ok' }) });
     }
     return Promise.resolve({ ok: false, json: async () => ({}) });
   });
 }
+
+// Keep legacy alias so any test that still calls mockOllamaOnline works
+const mockOllamaOnline = mockBackendOnline;
 
 function mockOllamaOffline() {
   global.fetch = jest.fn(() => Promise.reject(new Error('ECONNREFUSED')));
@@ -230,12 +235,12 @@ describe('multi-turn conversation', () => {
   test('sends previous conversation history with each new message', async () => {
     const messages = [];
     global.fetch = jest.fn((url, opts) => {
-      if (url.includes('/api/tags'))
-        return Promise.resolve({ ok: true, json: async () => ({ models: [{ name: 'phi3:latest' }] }) });
-      if (url.includes('/api/chat')) {
+      if (url.includes('/v1/models'))
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: 'phi3:latest' }] }) });
+      if (url.includes('/v1/chat/completions')) {
         const body = JSON.parse(opts.body);
         messages.push(body.messages);
-        return Promise.resolve({ ok: true, json: async () => ({ message: { role: 'assistant', content: 'reply' } }) });
+        return Promise.resolve({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: 'reply' } }] }) });
       }
       return Promise.resolve({ ok: false, json: async () => ({}) });
     });
@@ -308,13 +313,13 @@ describe('query — AIOS', () => {
   test('sends live kernel context (uptime, memory) in system prompt', async () => {
     const prompts = [];
     global.fetch = jest.fn((url, opts) => {
-      if (url.includes('/api/tags'))
-        return Promise.resolve({ ok: true, json: async () => ({ models: [{ name: 'phi3:latest' }] }) });
-      if (url.includes('/api/chat')) {
+      if (url.includes('/v1/models'))
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: 'phi3:latest' }] }) });
+      if (url.includes('/v1/chat/completions')) {
         const body = JSON.parse(opts.body);
         const sys = body.messages.find(m => m.role === 'system');
         if (sys) prompts.push(sys.content);
-        return Promise.resolve({ ok: true, json: async () => ({ message: { role: 'assistant', content: 'ok' } }) });
+        return Promise.resolve({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }) });
       }
       return Promise.resolve({ ok: false, json: async () => ({}) });
     });
@@ -326,7 +331,7 @@ describe('query — AIOS', () => {
   });
 
   test('defaults to AIOS for general questions', async () => {
-    mockOllamaOnline([{ name: 'phi3:latest' }], 'general answer');
+    mockBackendOnline([{ id: 'phi3:latest' }], 'general answer');
     const { ai } = make();
     const r = await ai.query('what time is it');
     expect(r.identity).toBe('aios');
@@ -336,7 +341,7 @@ describe('query — AIOS', () => {
 // ── AURA query (on-demand hardware intelligence) ─────────────────────────────
 describe('query — AURA', () => {
   test('routes to AURA when service is running and query matches pattern', async () => {
-    mockOllamaOnline([{ name: 'phi3:latest' }], 'hardware analysis');
+    mockBackendOnline([{ id: 'phi3:latest' }], 'hardware analysis');
     const svcMgr = makeSvcMgr({ aura: 'running' });
     const { ai } = make({ svcMgr });
     const r = await ai.query('analyze the memory architecture thoroughly');
@@ -346,12 +351,12 @@ describe('query — AURA', () => {
   test('falls back to AIOS if AURA query returns null', async () => {
     let callCount = 0;
     global.fetch = jest.fn((url, opts) => {
-      if (url.includes('/api/tags'))
-        return Promise.resolve({ ok: true, json: async () => ({ models: [{ name: 'phi3:latest' }] }) });
-      if (url.includes('/api/chat')) {
+      if (url.includes('/v1/models'))
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: 'phi3:latest' }] }) });
+      if (url.includes('/v1/chat/completions')) {
         callCount++;
         const reply = callCount === 1 ? '' : 'AIOS fallback';
-        return Promise.resolve({ ok: true, json: async () => ({ message: { role: 'assistant', content: reply } }) });
+        return Promise.resolve({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: reply } }] }) });
       }
       return Promise.resolve({ ok: false, json: async () => ({}) });
     });
@@ -543,7 +548,7 @@ describe('commands.aios', () => {
     const { ai } = make();
     const r = await ai.commands.aios(['status']);
     expect(r.status).toBe('ok');
-    expect(r.result).toContain('Ollama');
+    expect(r.result).toContain('llama.cpp');
   });
 
   test('"clear" clears AIOS history', async () => {
@@ -573,18 +578,18 @@ describe('commands.aios', () => {
   });
 
   test('status table shows phone setup instructions', async () => {
-    mockOllamaOnline([]);
+    mockBackendOnline([]);
     const { ai } = make();
     const r = await ai.commands.aios([]);
-    expect(r.result).toContain('ollama pull');
-    expect(r.result).toContain('qwen2:0.5b');
+    expect(r.result).toContain('llama-server');
+    expect(r.result).toContain('llama3.gguf');
   });
 });
 
 // ── commands.aura ─────────────────────────────────────────────────────────────
 describe('commands.aura', () => {
   test('no args returns status table', async () => {
-    mockOllamaOnline([{ name: 'phi3:latest' }]);
+    mockBackendOnline([{ id: 'phi3:latest' }]);
     const { ai } = make();
     const r = await ai.commands.aura([]);
     expect(r.status).toBe('ok');
@@ -592,7 +597,7 @@ describe('commands.aura', () => {
   });
 
   test('"clear" clears AURA history', async () => {
-    mockOllamaOnline([{ name: 'phi3:latest' }], 'answer');
+    mockBackendOnline([{ id: 'phi3:latest' }], 'answer');
     const svcMgr = makeSvcMgr({ aura: 'running' });
     const { ai } = make({ svcMgr });
     await ai.query('analyze', { identity: 'aura' });
@@ -603,7 +608,7 @@ describe('commands.aura', () => {
   });
 
   test('routes question to AURA when running, prefixes [AURA]', async () => {
-    mockOllamaOnline([{ name: 'phi3:latest' }], 'hardware report');
+    mockBackendOnline([{ id: 'phi3:latest' }], 'hardware report');
     const svcMgr = makeSvcMgr({ aura: 'running' });
     const { ai } = make({ svcMgr });
     const r = await ai.commands.aura(['analyze', 'memory', 'deeply']);
@@ -614,13 +619,13 @@ describe('commands.aura', () => {
   test('prefixes [AIOS] when AURA returns empty and falls back to AIOS', async () => {
     let callCount = 0;
     global.fetch = jest.fn((url, opts) => {
-      if (url.includes('/api/tags'))
-        return Promise.resolve({ ok: true, json: async () => ({ models: [{ name: 'phi3:latest' }] }) });
-      if (url.includes('/api/chat')) {
+      if (url.includes('/v1/models'))
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: 'phi3:latest' }] }) });
+      if (url.includes('/v1/chat/completions')) {
         callCount++;
         // First call (AURA) returns empty — forces fallback to AIOS
         const reply = callCount === 1 ? '' : 'AIOS fallback answer';
-        return Promise.resolve({ ok: true, json: async () => ({ message: { role: 'assistant', content: reply } }) });
+        return Promise.resolve({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: reply } }] }) });
       }
       return Promise.resolve({ ok: false, json: async () => ({}) });
     });
@@ -633,7 +638,7 @@ describe('commands.aura', () => {
 
 // ── Status table content — phone setup visible ────────────────────────────────
 describe('status table', () => {
-  test('shows ollama offline message when Ollama down', async () => {
+  test('shows llama.cpp offline message when backend down', async () => {
     mockOllamaOffline();
     const { ai } = make();
     const r = await ai.commands.aios([]);
@@ -641,7 +646,7 @@ describe('status table', () => {
   });
 
   test('shows model name when detected', async () => {
-    mockOllamaOnline([{ name: 'qwen2:latest' }]);
+    mockBackendOnline([{ id: 'qwen2:latest' }]);
     const { ai } = make();
     await ai._detectModel(['qwen2:0.5b', 'phi3']); // prime detection
     const r = await ai.commands.aios([]);
@@ -649,7 +654,7 @@ describe('status table', () => {
   });
 
   test('result contains no jarvis, analyst, code, heavy references', async () => {
-    mockOllamaOnline([{ name: 'phi3:latest' }]);
+    mockBackendOnline([{ id: 'phi3:latest' }]);
     const { ai } = make();
     const r = await ai.commands.aios([]);
     const lower = r.result.toLowerCase();

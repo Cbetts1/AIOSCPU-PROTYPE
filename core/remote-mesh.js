@@ -4,9 +4,9 @@
  *
  * 7 open-source AI models wired as one brain — all free, no API keys, no cloud.
  * AIOS is the microphone: your phone routes lightweight JSON requests (~1KB),
- * Ollama handles all computation — on this device or a home server/PC.
+ * llama.cpp handles all computation — on this device or a home server/PC.
  *
- * Agents (all via Ollama — open-source, free, no accounts required):
+ * Agents (all via llama.cpp — open-source, free, no accounts required):
  * ┌────────────┬──────────────────────┬────────────────────────────────────────┐
  * │ Agent      │ Model                │ Specialty                              │
  * ├────────────┼──────────────────────┼────────────────────────────────────────┤
@@ -20,10 +20,9 @@
  * └────────────┴──────────────────────┴────────────────────────────────────────┘
  *
  * How your phone stays light:
- *   Models are stored and served by Ollama.  By default Ollama runs locally
- *   (localhost:11434).  Point OLLAMA_HOST at a home server or PC and your
- *   phone only sends ~1KB JSON per request — all GPU/CPU work stays on the
- *   server.
+ *   Models are served by llama.cpp (llama-server).  By default it runs locally
+ *   (localhost:8080).  Point LLAMA_HOST at a home server or PC and your phone
+ *   only sends ~1KB JSON per request — all CPU/GPU work stays on the server.
  *
  * Smart routing (zero cost, keyword-driven):
  *   fast/simple   → speed  (qwen2:0.5b — instant)
@@ -36,22 +35,20 @@
  *
  * All responses flow through memory-core: AIOS learns from every interaction.
  *
- * Setup (one-time, on any machine running Ollama):
- *   ollama pull qwen2:0.5b            # 394 MB — start here, fits any phone
- *   ollama pull tinyllama             # 637 MB
- *   ollama pull gemma:2b              # 1.4 GB
- *   ollama pull phi3                  # 2.3 GB
- *   ollama pull deepseek-coder:6.7b   # 3.8 GB
- *   ollama pull llama3                # 4.7 GB
- *   ollama pull mistral               # 4.1 GB
+ * Setup (one-time, on any machine with llama.cpp):
+ *   # Build or install llama.cpp: https://github.com/ggerganov/llama.cpp
+ *   # Download a GGUF model (e.g. llama3):
+ *   #   huggingface-cli download Meta-Llama/Meta-Llama-3-8B-Instruct --include "*.gguf"
+ *   # Start the server:
+ *   llama-server -m llama3.gguf --port 8080
  *
  *   # To offload all compute to a home server/PC:
- *   export OLLAMA_HOST=http://192.168.1.100:11434
+ *   export LLAMA_HOST=http://192.168.1.100:8080
  *
  * Terminal commands:
  *   mesh            — show agent status
  *   mesh status     — same as above
- *   mesh refresh    — re-discover which models Ollama has
+ *   mesh refresh    — re-discover which models are loaded
  *   mesh help       — show this help
  *
  * Zero external npm dependencies.
@@ -160,8 +157,9 @@ function _withTimeout(promise, ms) {
 // createRemoteMesh factory
 // ---------------------------------------------------------------------------
 function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
-  // Ollama base URL — override with OLLAMA_HOST to offload to a home server/PC
-  const _ollamaUrl = (process.env.OLLAMA_HOST || 'http://127.0.0.1:11434').replace(/\/$/, '');
+  // llama.cpp base URL — override with LLAMA_HOST to offload to a home server/PC
+  // OLLAMA_HOST is accepted as a legacy alias so existing configs keep working.
+  const _llamaUrl = (process.env.LLAMA_HOST || process.env.OLLAMA_HOST || 'http://127.0.0.1:8080').replace(/\/$/, '');
 
   // Optional VFS reference — set via setFilesystem(vfs) after boot.
   // Currently stored for future use: runtime model customization by reading
@@ -204,22 +202,22 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
     if (cb) { cb.failures = 0; cb.tripped = false; }
   }
 
-  // ── Ollama model discovery ─────────────────────────────────────────────────
+  // ── llama.cpp model discovery ─────────────────────────────────────────────
   async function _discoverModels() {
     _available.clear();
     try {
-      const res = await _withTimeout(fetch(`${_ollamaUrl}/api/tags`), 4000);
+      const res = await _withTimeout(fetch(`${_llamaUrl}/v1/models`), 4000);
       if (!res.ok) return;
       const data = await res.json();
       const installed = new Set(
-        (data.models || []).map(m => (m.name || '').split(':')[0].toLowerCase()),
+        (data.data || []).map(m => (m.id || '').split(':')[0].toLowerCase()),
       );
       for (const agent of MESH_AGENTS) {
         const base = agent.model.split(':')[0].toLowerCase();
         if (installed.has(base)) _available.set(agent.name, agent);
       }
     } catch (_) {
-      // Ollama offline or unreachable — _available stays empty, graceful fallback
+      // llama.cpp offline or unreachable — _available stays empty, graceful fallback
     }
     _discoveryDone = true;
   }
@@ -229,7 +227,7 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
     if (!_discoveryDone) await _discoverModels();
   }
 
-  // ── Single-agent query via Ollama /api/chat ────────────────────────────────
+  // ── Single-agent query via llama.cpp /v1/chat/completions ────────────────
   async function _queryAgent(agent, prompt) {
     // Inject collective intelligence context so this model benefits from
     // everything all other models have previously learned about this topic
@@ -244,19 +242,20 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
       { role: 'user',   content: prompt },
     ];
     const res = await _withTimeout(
-      fetch(`${_ollamaUrl}/api/chat`, {
+      fetch(`${_llamaUrl}/v1/chat/completions`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ model: agent.model, messages, stream: false }),
       }),
-      90000, // Ollama can be slow on first load — 90s matches aios-aura.js
+      90000, // llama.cpp can be slow on first load — 90s timeout
     );
-    if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`llama.cpp HTTP ${res.status}`);
     const data = await res.json();
-    const text = data.message && data.message.content
-      ? data.message.content.trim()
+    const text = data.choices && data.choices[0] && data.choices[0].message &&
+                 data.choices[0].message.content
+      ? data.choices[0].message.content.trim()
       : null;
-    if (!text) throw new Error('Empty response from Ollama');
+    if (!text) throw new Error('Empty response from llama.cpp');
     return text;
   }
 
@@ -317,7 +316,7 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
     if (_available.size === 0) {
       throw new Error(
         'No mesh agents available. ' +
-        'Run `ollama serve` and `ollama pull qwen2:0.5b`, then `mesh refresh`.',
+        'Run `llama-server -m <model.gguf>` and reload, then `mesh refresh`.',
       );
     }
 
@@ -367,7 +366,7 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
     }
 
     if (!result) {
-      throw new Error('All mesh agents failed. Check `ollama serve` and `mesh status`.');
+      throw new Error('All mesh agents failed. Check `llama-server` and `mesh status`.');
     }
 
     // ── 4. Contribute to collective intelligence ─────────────────────────────
@@ -460,7 +459,7 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
         await _discoverModels(); // always refresh for status display
         const lines = [
           `AI Mesh v${VERSION}  —  ${_available.size}/7 agents online`,
-          `Ollama  : ${_ollamaUrl}`,
+          `llama.cpp: ${_llamaUrl}`,
           '',
         ];
         for (const agent of MESH_AGENTS) {
@@ -475,12 +474,12 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
         lines.push('');
         if (_available.size < 7) {
           lines.push(
-            'To add more agents: ollama pull <model>  then: mesh refresh',
+            'To add more agents: start llama-server with that model, then: mesh refresh',
           );
         }
-        if (_ollamaUrl.includes('127.0.0.1') || _ollamaUrl.includes('localhost')) {
+        if (_llamaUrl.includes('127.0.0.1') || _llamaUrl.includes('localhost')) {
           lines.push(
-            'Tip: export OLLAMA_HOST=http://<home-server>:11434 to offload to a PC',
+            'Tip: export LLAMA_HOST=http://<home-server>:8080 to offload to a PC',
           );
         }
         return { status: 'ok', result: lines.join('\n') };
@@ -496,25 +495,25 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
             'Commands:',
             '  mesh           — show agent status',
             '  mesh status    — same as above',
-            '  mesh refresh   — re-discover models from Ollama',
+            '  mesh refresh   — re-discover models from llama-server',
             '  mesh help      — show this help',
             '',
-            'Agents (all via Ollama — free, open-source, no API keys):',
+            'Agents (all via llama.cpp — free, open-source, no API keys):',
             ...MESH_AGENTS.map(a =>
               `  ${a.name.padEnd(8)} ${a.model.padEnd(24)} ${a.role}`
             ),
             '',
-            'Setup (pull the models you want):',
-            '  ollama pull qwen2:0.5b          # 394MB — start here',
-            '  ollama pull tinyllama           # 637MB',
-            '  ollama pull gemma:2b            # 1.4GB',
-            '  ollama pull phi3                # 2.3GB',
-            '  ollama pull deepseek-coder:6.7b # 3.8GB',
-            '  ollama pull llama3              # 4.7GB',
-            '  ollama pull mistral             # 4.1GB',
+            'Setup (download a GGUF and start llama-server):',
+            '  # https://github.com/ggerganov/llama.cpp',
+            '  llama-server -m llama3.gguf --port 8080',
+            '  llama-server -m tinyllama.gguf --port 8081',
+            '  llama-server -m phi3.gguf --port 8082',
+            '  llama-server -m gemma-2b.gguf --port 8083',
+            '  llama-server -m deepseek-coder-6.7b.gguf --port 8084',
+            '  llama-server -m mistral-7b.gguf --port 8085',
             '',
             'Offload all compute to a home server/PC (phone stays light):',
-            '  export OLLAMA_HOST=http://192.168.1.100:11434',
+            '  export LLAMA_HOST=http://192.168.1.100:8080',
           ].join('\n'),
         };
       }
@@ -525,7 +524,7 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
         await _discoverModels();
         return {
           status: 'ok',
-          result: `Refreshed: ${_available.size}/7 agents online. (Ollama: ${_ollamaUrl})`,
+          result: `Refreshed: ${_available.size}/7 agents online. (llama.cpp: ${_llamaUrl})`,
         };
       }
 
@@ -541,7 +540,7 @@ function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
     return {
       name:       'remote-mesh',
       version:    VERSION,
-      ollamaHost: _ollamaUrl,
+      llamaHost: _llamaUrl,
       agents:     MESH_AGENTS.map(a => ({
         name:      a.name,
         model:     a.model,
