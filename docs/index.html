@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIOSCPU Prototype One — AIOS Lite</title>
+  <meta name="description" content="A fully self-contained, Termux-bootable, offline AI-native operating system. Zero external dependencies · Pure Node.js · Runs on Android via Termux." />
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d0f14;
+      --surface:    #13161f;
+      --surface2:   #1a1e2b;
+      --border:     #252a38;
+      --accent:     #00e5ff;
+      --accent2:    #7c4dff;
+      --accent3:    #00e676;
+      --warn:       #ffab40;
+      --text:       #c8d0e0;
+      --text-dim:   #6b7794;
+      --text-bright:#eaf0ff;
+      --radius:     10px;
+      --mono:       'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* ─── Scrollbar ────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ─── Typography ───────────────────────────────────────────────── */
+    h1, h2, h3 { color: var(--text-bright); font-weight: 700; letter-spacing: -0.02em; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre, .mono { font-family: var(--mono); }
+
+    /* ─── Layout ───────────────────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 80px 0; }
+    section:nth-child(even) { background: var(--surface); }
+
+    /* ─── Nav ──────────────────────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,15,20,.88);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 0;
+    }
+    nav .inner {
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 1100px; margin: 0 auto; padding: 0 24px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--mono); font-weight: 700; font-size: 1rem;
+      color: var(--accent); letter-spacing: .04em;
+    }
+    .nav-logo .dot { color: var(--accent3); }
+    nav ul { display: flex; gap: 28px; list-style: none; }
+    nav ul a { color: var(--text-dim); font-size: .9rem; transition: color .2s; }
+    nav ul a:hover { color: var(--accent); text-decoration: none; }
+
+    /* ─── Hero ─────────────────────────────────────────────────────── */
+    .hero {
+      position: relative; overflow: hidden;
+      padding: 120px 0 90px;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(0,229,255,.08) 0%, transparent 70%),
+                  var(--bg);
+    }
+    .hero::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,.015) 40px),
+                  repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,.015) 40px);
+      pointer-events: none;
+    }
+    .hero-inner { position: relative; z-index: 1; text-align: center; }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.25);
+      border-radius: 100px; padding: 6px 16px;
+      font-size: .78rem; font-family: var(--mono); color: var(--accent);
+      margin-bottom: 28px; letter-spacing: .06em; text-transform: uppercase;
+    }
+    .hero-badge .pulse {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent3);
+      box-shadow: 0 0 6px var(--accent3);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: .3; }
+    }
+
+    .hero h1 {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 1.15rem; color: var(--text-dim); max-width: 600px;
+      margin: 0 auto 40px;
+    }
+    .hero-pills {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      justify-content: center; margin-bottom: 44px;
+    }
+    .pill {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 100px; padding: 5px 16px;
+      font-size: .8rem; color: var(--text-dim);
+    }
+    .pill span { color: var(--accent3); margin-right: 6px; }
+
+    .hero-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 28px; border-radius: var(--radius);
+      font-weight: 600; font-size: .95rem; transition: all .2s; cursor: pointer;
+      text-decoration: none !important;
+    }
+    .btn-primary {
+      background: var(--accent); color: #000;
+    }
+    .btn-primary:hover { background: #33eaff; box-shadow: 0 0 20px rgba(0,229,255,.4); }
+    .btn-ghost {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ─── Terminal window ──────────────────────────────────────────── */
+    .terminal-wrap { margin-top: 60px; max-width: 680px; margin-left: auto; margin-right: auto; }
+    .terminal {
+      background: #0a0c10;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    }
+    .terminal-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .tbar-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .tbar-dot.red { background: #ff5f57; }
+    .tbar-dot.yellow { background: #febc2e; }
+    .tbar-dot.green { background: #28c840; }
+    .tbar-title {
+      flex: 1; text-align: center;
+      font-family: var(--mono); font-size: .78rem; color: var(--text-dim);
+    }
+    .terminal-body { padding: 20px 22px; font-family: var(--mono); font-size: .85rem; line-height: 1.8; }
+    .t-dim { color: var(--text-dim); }
+    .t-green { color: var(--accent3); }
+    .t-cyan { color: var(--accent); }
+    .t-purple { color: var(--accent2); }
+    .t-yellow { color: var(--warn); }
+    .t-white { color: var(--text-bright); }
+    .t-prompt::before { content: '$ '; color: var(--accent2); }
+    .cursor { display: inline-block; width: 9px; height: 1em; background: var(--accent); vertical-align: text-bottom; animation: blink 1.1s step-end infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ─── Feature grid ─────────────────────────────────────────────── */
+    .section-label {
+      font-family: var(--mono); font-size: .75rem; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+    }
+    .section-title { font-size: clamp(1.6rem, 3vw, 2.2rem); margin-bottom: 14px; }
+    .section-desc { color: var(--text-dim); max-width: 560px; margin-bottom: 48px; font-size: 1rem; }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px;
+      transition: border-color .25s, transform .25s;
+    }
+    .feature-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .feature-icon {
+      font-size: 1.8rem; margin-bottom: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 50px; height: 50px;
+      background: rgba(0,229,255,.07); border-radius: 10px;
+    }
+    .feature-card h3 { font-size: 1rem; margin-bottom: 8px; color: var(--text-bright); }
+    .feature-card p { font-size: .88rem; color: var(--text-dim); line-height: 1.6; }
+
+    /* ─── Architecture diagram ─────────────────────────────────────── */
+    .arch-block {
+      background: #0a0c10; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px 32px;
+      font-family: var(--mono); font-size: .84rem; line-height: 2;
+      overflow-x: auto; color: var(--text);
+    }
+
+    /* ─── Commands section ─────────────────────────────────────────── */
+    .cmd-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .cmd-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 22px 24px;
+    }
+    .cmd-card h3 {
+      font-size: .85rem; font-family: var(--mono); letter-spacing: .06em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+    }
+    .cmd-list { list-style: none; }
+    .cmd-list li {
+      display: flex; gap: 10px; align-items: baseline;
+      padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: .84rem;
+    }
+    .cmd-list li:last-child { border-bottom: none; }
+    .cmd-name { font-family: var(--mono); color: var(--accent3); white-space: nowrap; min-width: 90px; }
+    .cmd-desc { color: var(--text-dim); font-size: .82rem; }
+
+    /* ─── ISA table ────────────────────────────────────────────────── */
+    .isa-table {
+      width: 100%; border-collapse: collapse;
+      font-family: var(--mono); font-size: .84rem;
+    }
+    .isa-table th {
+      text-align: left; padding: 10px 16px;
+      background: var(--surface2); color: var(--accent);
+      font-size: .75rem; letter-spacing: .08em; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .isa-table td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text); }
+    .isa-table tr:last-child td { border-bottom: none; }
+    .isa-table tr:hover td { background: rgba(255,255,255,.02); }
+    .isa-table .cat { color: var(--accent2); font-weight: 600; }
+    .isa-table .ops { color: var(--accent3); }
+
+    /* ─── Quickstart ───────────────────────────────────────────────── */
+    .qs-steps { display: grid; gap: 16px; }
+    .qs-step {
+      display: flex; gap: 18px; align-items: flex-start;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 22px;
+    }
+    .qs-num {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,229,255,.12); color: var(--accent);
+      font-family: var(--mono); font-size: .85rem; font-weight: 700;
+    }
+    .qs-step h4 { font-size: .95rem; margin-bottom: 6px; color: var(--text-bright); }
+    .qs-step pre {
+      background: #0a0c10; border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px;
+      font-size: .8rem; overflow-x: auto; color: var(--accent3); margin-top: 8px;
+    }
+
+    /* ─── Stat bar ─────────────────────────────────────────────────── */
+    .stat-bar {
+      display: flex; flex-wrap: wrap; gap: 0;
+      border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    }
+    .stat {
+      flex: 1; min-width: 160px; padding: 28px 24px;
+      text-align: center; border-right: 1px solid var(--border);
+    }
+    .stat:last-child { border-right: none; }
+    .stat-num {
+      font-size: 2rem; font-weight: 700; font-family: var(--mono);
+      color: var(--accent); display: block; margin-bottom: 4px;
+    }
+    .stat-label { font-size: .8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; }
+
+    /* ─── Footer ───────────────────────────────────────────────────── */
+    footer {
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 40px 0; text-align: center;
+      font-size: .85rem; color: var(--text-dim);
+    }
+    footer a { color: var(--text-dim); }
+    footer a:hover { color: var(--accent); }
+    .footer-logo { font-family: var(--mono); color: var(--accent); font-size: 1rem; margin-bottom: 10px; }
+
+    /* ─── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      nav ul { display: none; }
+      .stat { min-width: 140px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="inner">
+    <div class="nav-logo">
+      <span>AIOS</span><span class="dot">▸</span><span>CPU</span>
+    </div>
+    <ul>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#commands">Commands</a></li>
+      <li><a href="#isa">ISA</a></li>
+      <li><a href="#quickstart">Quick Start</a></li>
+      <li><a href="https://github.com/Cbetts1/AIOSCPU-PROTYPE" target="_blank" rel="noopener">GitHub ↗</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
+<section class="hero" id="hero">
+  <div class="container hero-inner">
+
+    <div class="hero-badge">
+      <span class="pulse"></span>
+      AIOS Lite v1.0.0 &nbsp;·&nbsp; Prototype One
+    </div>
+
+    <h1>
+      An <span class="gradient">AI-Native OS</span><br/>that fits in your pocket
+    </h1>
+
+    <p class="hero-sub">
+      A fully self-contained, Termux-bootable operating system. Zero external
+      dependencies · Pure Node.js · Runs on Android via Termux.
+    </p>
+
+    <div class="hero-pills">
+      <div class="pill"><span>✓</span>No npm install</div>
+      <div class="pill"><span>✓</span>No internet required</div>
+      <div class="pill"><span>✓</span>No root / sudo</div>
+      <div class="pill"><span>✓</span>Node.js ≥ 14</div>
+      <div class="pill"><span>✓</span>MIT License</div>
+    </div>
+
+    <div class="hero-cta">
+      <a href="#quickstart" class="btn btn-primary">⚡ Get Started</a>
+      <a href="https://github.com/Cbetts1/AIOSCPU-PROTYPE" class="btn btn-ghost" target="_blank" rel="noopener">
+        ⭐ Star on GitHub
+      </a>
+    </div>
+
+    <!-- Terminal window -->
+    <div class="terminal-wrap">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span class="tbar-dot red"></span>
+          <span class="tbar-dot yellow"></span>
+          <span class="tbar-dot green"></span>
+          <span class="tbar-title">AIOS Lite — boot sequence</span>
+        </div>
+        <div class="terminal-body">
+<span class="t-cyan">╔══════════════════════════════════════╗</span>
+<span class="t-cyan">║      AIOSCPU Prototype One v1.0      ║</span>
+<span class="t-cyan">║         AIOS Lite  •  MIT            ║</span>
+<span class="t-cyan">╚══════════════════════════════════════╝</span>
+
+<span class="t-dim">[boot]</span> <span class="t-green">✓</span> Kernel initialized
+<span class="t-dim">[boot]</span> <span class="t-green">✓</span> VFS mounted at /
+<span class="t-dim">[boot]</span> <span class="t-green">✓</span> AIOSCPU v1.0 online  <span class="t-dim">(32-bit, 64 KB)</span>
+<span class="t-dim">[boot]</span> <span class="t-green">✓</span> AI Core ready
+<span class="t-dim">[boot]</span> <span class="t-green">✓</span> Service Manager started
+<span class="t-dim">[boot]</span> <span class="t-green">✓</span> Terminal ready
+
+<span class="t-purple">aios@prototype</span><span class="t-dim">:</span><span class="t-cyan">~</span><span class="t-white"> $ </span><span class="t-yellow">cpu demo</span>
+<span class="t-dim">Running Hello World on AIOSCPU...</span>
+<span class="t-green">Hello, World!</span>
+
+<span class="t-purple">aios@prototype</span><span class="t-dim">:</span><span class="t-cyan">~</span><span class="t-white"> $ </span><span class="cursor"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Stats bar ─────────────────────────────────────────────────────── -->
+<div class="container" style="padding-top:0; padding-bottom:0; position:relative; z-index:2; margin-top:-1px;">
+  <div class="stat-bar">
+    <div class="stat"><span class="stat-num">30+</span><span class="stat-label">ISA Opcodes</span></div>
+    <div class="stat"><span class="stat-num">64 KB</span><span class="stat-label">Virtual Memory</span></div>
+    <div class="stat"><span class="stat-num">0</span><span class="stat-label">npm Dependencies</span></div>
+    <div class="stat"><span class="stat-num">27</span><span class="stat-label">Boot Steps</span></div>
+    <div class="stat"><span class="stat-num">∞</span><span class="stat-label">Hackability</span></div>
+  </div>
+</div>
+
+<!-- ── Features ──────────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">// features</div>
+    <h2 class="section-title">Everything in one boot</h2>
+    <p class="section-desc">
+      AIOSCPU Prototype One ships with a complete software-layer OS — kernel, CPU,
+      filesystem, AI core, and a live terminal — all in a single Node.js process.
+    </p>
+
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <div class="feature-icon">🧠</div>
+        <h3>AIOSCPU v1.0 — Virtual Processor</h3>
+        <p>Software-emulated 32-bit CPU with 30+ ISA opcodes across 6 instruction
+           categories. 64 KB flat memory, 8 general-purpose registers, hardware stack,
+           and a 10 M-cycle safety cap.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">⚙️</div>
+        <h3>Kernel</h3>
+        <p>Isolating event bus, process table, module registry, and full syscall
+           dispatch. The CPU <code>SYSCALL</code> instruction routes directly into
+           OS actions — making AIOSCPU a first-class kernel citizen.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🗂</div>
+        <h3>In-Memory Filesystem</h3>
+        <p>POSIX-like Virtual File System with <code>mkdir</code>, <code>ls</code>,
+           <code>cat</code>, <code>write</code>, <code>mv</code>, <code>rm</code>,
+           <code>stat</code>, and <code>tree</code>. Files persist for the lifetime of
+           the session.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔀</div>
+        <h3>Command Router</h3>
+        <p>Hot-swap plug-in dispatcher. Modules register command handlers at boot and
+           can be added or replaced at runtime without restarting the OS.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🛠</div>
+        <h3>Service Manager</h3>
+        <p>Start, stop, and restart named background services with <code>svc</code>.
+           Services are isolated, lifecycle-managed processes that live inside the
+           kernel's process table.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <h3>AI Core</h3>
+        <p>Multi-backend AI routing with circuit breakers, persistent context, learning
+           data, and proactive suggestion events. Wired to the Memory Core for unified
+           cognitive output.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">💡</div>
+        <h3>AIOS + AURA</h3>
+        <p>AIOS is the always-on AI personality (phone-first models). AURA is the
+           on-demand hardware intelligence layer. Multi-turn <code>/api/chat</code>
+           endpoint. Works fully offline.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🧬</div>
+        <h3>Consciousness Layer</h3>
+        <p>Memory Engine, Mode Manager, Model Registry, Diagnostics Engine, Port Server,
+           and the unified Consciousness module — a cognitive runtime wired to the
+           kernel bus.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">💻</div>
+        <h3>Interactive Terminal</h3>
+        <p>A full readline REPL with ANSI colours, command history, and tab hints.
+           Runs on any Node.js ≥ 14 — no native dependencies, no build step,
+           no internet.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3>Termux-Native</h3>
+        <p>Designed from the ground up to boot on Android via Termux. No root, no
+           compilation, no package manager needed beyond <code>pkg install nodejs</code>.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔁</div>
+        <h3>CPU–Kernel Self-Hosting Loop</h3>
+        <p>Programs running on the virtual CPU use <code>SYSCALL</code> to reach the
+           real OS. Read files, print output, trigger shutdown — all from within
+           a CPU program.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Kernel Lockdown <span style="font-size:.7rem;color:var(--warn);font-family:var(--mono);"> coming soon</span></h3>
+        <p>The kernel is being hardened into a frozen, tamper-proof foundation.
+           All new features will be built outside it as external modules against a
+           read-only kernel proxy — keeping the core stable and auditable.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Architecture ───────────────────────────────────────────────────── -->
+<section id="arch">
+  <div class="container">
+    <div class="section-label">// architecture</div>
+    <h2 class="section-title">How it all fits together</h2>
+    <p class="section-desc">A single <code>./aos</code> entry point spins up the full OS in 27 ordered boot steps.</p>
+
+    <div class="arch-block">
+<span class="t-cyan">./aos</span>
+ └─ <span class="t-yellow">boot/bootstrap.js</span>          <span class="t-dim">← 27-step OS boot sequencer</span>
+      ├─ <span class="t-green">core/kernel.js</span>           <span class="t-dim">Event bus · process table · syscall table</span>
+      ├─ <span class="t-green">core/filesystem.js</span>       <span class="t-dim">In-memory VFS  (POSIX-like)</span>
+      ├─ <span class="t-green">core/cpu.js</span>              <span class="t-dim">AIOSCPU v1.0   (32-bit virtual processor)</span>
+      ├─ <span class="t-green">core/router.js</span>           <span class="t-dim">Command router (hot-swap modules)</span>
+      ├─ <span class="t-green">core/service-manager.js</span>  <span class="t-dim">Service lifecycle</span>
+      ├─ <span class="t-green">core/ai-core.js</span>          <span class="t-dim">Multi-backend AI routing + circuit breakers</span>
+      ├─ <span class="t-green">core/memory-core.js</span>      <span class="t-dim">Unified cognitive layer</span>
+      ├─ <span class="t-green">core/consciousness.js</span>    <span class="t-dim">Consciousness layer orchestrator</span>
+      ├─ <span class="t-green">core/aios-aura.js</span>        <span class="t-dim">AIOS personality + AURA hardware intelligence</span>
+      └─ <span class="t-purple">terminal/terminal.js</span>     <span class="t-dim">readline REPL  (user shell)</span>
+
+<span class="t-dim">CPU–Kernel self-hosting loop:</span>
+<span class="t-yellow">AIOSCPU program</span>
+  └─ SYSCALL instruction
+       └─ <span class="t-green">kernel.syscall(num, args)</span>
+            └─ OS action  <span class="t-dim">(write / fs / exit / …)</span>
+                 └─ <span class="t-cyan">kernel.bus.emit('kernel:syscall', …)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Commands ───────────────────────────────────────────────────────── -->
+<section id="commands">
+  <div class="container">
+    <div class="section-label">// commands</div>
+    <h2 class="section-title">Built-in shell commands</h2>
+    <p class="section-desc">Everything available at the interactive terminal once AIOS boots.</p>
+
+    <div class="cmd-grid">
+
+      <div class="cmd-card">
+        <h3>📁 Filesystem</h3>
+        <ul class="cmd-list">
+          <li><span class="cmd-name">pwd</span><span class="cmd-desc">Print working directory</span></li>
+          <li><span class="cmd-name">cd</span><span class="cmd-desc">Change directory</span></li>
+          <li><span class="cmd-name">mkdir</span><span class="cmd-desc">Create directory (supports -p)</span></li>
+          <li><span class="cmd-name">ls</span><span class="cmd-desc">List directory contents</span></li>
+          <li><span class="cmd-name">touch</span><span class="cmd-desc">Create empty file</span></li>
+          <li><span class="cmd-name">cat</span><span class="cmd-desc">Read a file</span></li>
+          <li><span class="cmd-name">write</span><span class="cmd-desc">Write content to file</span></li>
+          <li><span class="cmd-name">rm</span><span class="cmd-desc">Remove file or directory (-r)</span></li>
+          <li><span class="cmd-name">cp</span><span class="cmd-desc">Copy file</span></li>
+          <li><span class="cmd-name">mv</span><span class="cmd-desc">Move / rename</span></li>
+          <li><span class="cmd-name">stat</span><span class="cmd-desc">Show file metadata</span></li>
+          <li><span class="cmd-name">tree</span><span class="cmd-desc">Recursive directory listing</span></li>
+        </ul>
+      </div>
+
+      <div class="cmd-card">
+        <h3>⚙️ OS / System</h3>
+        <ul class="cmd-list">
+          <li><span class="cmd-name">uname</span><span class="cmd-desc">OS version string</span></li>
+          <li><span class="cmd-name">uptime</span><span class="cmd-desc">Seconds since boot</span></li>
+          <li><span class="cmd-name">ps</span><span class="cmd-desc">List running processes</span></li>
+          <li><span class="cmd-name">kill</span><span class="cmd-desc">Kill a process by PID</span></li>
+          <li><span class="cmd-name">env</span><span class="cmd-desc">Show environment variables</span></li>
+          <li><span class="cmd-name">date</span><span class="cmd-desc">Current date/time (ISO 8601)</span></li>
+          <li><span class="cmd-name">whoami</span><span class="cmd-desc">Current user</span></li>
+          <li><span class="cmd-name">hostname</span><span class="cmd-desc">System hostname</span></li>
+        </ul>
+      </div>
+
+      <div class="cmd-card">
+        <h3>🧠 AIOSCPU</h3>
+        <ul class="cmd-list">
+          <li><span class="cmd-name">cpu demo</span><span class="cmd-desc">Run Hello World on the AIOSCPU</span></li>
+          <li><span class="cmd-name">cpu info</span><span class="cmd-desc">Show CPU spec and state</span></li>
+          <li><span class="cmd-name">cpu regs</span><span class="cmd-desc">Dump all register values</span></li>
+          <li><span class="cmd-name">cpu reset</span><span class="cmd-desc">Reset the CPU</span></li>
+        </ul>
+      </div>
+
+      <div class="cmd-card">
+        <h3>🛠 Service Manager</h3>
+        <ul class="cmd-list">
+          <li><span class="cmd-name">svc list</span><span class="cmd-desc">List all services and states</span></li>
+          <li><span class="cmd-name">svc status</span><span class="cmd-desc">Detailed service status</span></li>
+          <li><span class="cmd-name">svc start</span><span class="cmd-desc">Start a service</span></li>
+          <li><span class="cmd-name">svc stop</span><span class="cmd-desc">Stop a service</span></li>
+          <li><span class="cmd-name">svc restart</span><span class="cmd-desc">Restart a service</span></li>
+        </ul>
+      </div>
+
+      <div class="cmd-card">
+        <h3>🔀 Router / General</h3>
+        <ul class="cmd-list">
+          <li><span class="cmd-name">help</span><span class="cmd-desc">List all available commands</span></li>
+          <li><span class="cmd-name">version</span><span class="cmd-desc">Router version</span></li>
+          <li><span class="cmd-name">echo</span><span class="cmd-desc">Echo text back</span></li>
+          <li><span class="cmd-name">history</span><span class="cmd-desc">Command history</span></li>
+          <li><span class="cmd-name">clear</span><span class="cmd-desc">Clear screen</span></li>
+          <li><span class="cmd-name">exit</span><span class="cmd-desc">Shut down AIOS Lite</span></li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── ISA ────────────────────────────────────────────────────────────── -->
+<section id="isa">
+  <div class="container">
+    <div class="section-label">// instruction set</div>
+    <h2 class="section-title">AIOSCPU v1.0 ISA</h2>
+    <p class="section-desc">
+      32-bit virtual processor · 8 registers (R0–R7) · PC · SP · FLAGS ·
+      64 KB flat address space · Stack at <code>0x0100–0x01FF</code>
+    </p>
+
+    <div style="overflow-x:auto; border: 1px solid var(--border); border-radius: var(--radius);">
+      <table class="isa-table">
+        <thead>
+          <tr><th>Category</th><th>Instructions</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="cat">Control</td>
+            <td class="ops">NOP &nbsp; HALT &nbsp; JMP &nbsp; JMPR &nbsp; JZ &nbsp; JNZ &nbsp; JLT &nbsp; JGT &nbsp; JLE &nbsp; JGE &nbsp; CALL &nbsp; RET</td>
+          </tr>
+          <tr>
+            <td class="cat">Data</td>
+            <td class="ops">MOV &nbsp; LOADI &nbsp; LOAD &nbsp; STORE &nbsp; LOADR &nbsp; STORER &nbsp; PUSH &nbsp; POP</td>
+          </tr>
+          <tr>
+            <td class="cat">Arithmetic</td>
+            <td class="ops">ADD &nbsp; ADDI &nbsp; SUB &nbsp; MUL &nbsp; DIV &nbsp; MOD</td>
+          </tr>
+          <tr>
+            <td class="cat">Bitwise</td>
+            <td class="ops">AND &nbsp; OR &nbsp; XOR &nbsp; NOT &nbsp; SHL &nbsp; SHR</td>
+          </tr>
+          <tr>
+            <td class="cat">Compare</td>
+            <td class="ops">CMP &nbsp; CMPI</td>
+          </tr>
+          <tr>
+            <td class="cat">OS Bridge</td>
+            <td class="ops">SYSCALL &nbsp; IN &nbsp; OUT</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:16px; font-size:.84rem; color:var(--text-dim);">
+      Full specification →
+      <a href="AIOSCPU-SPEC.md">docs/AIOSCPU-SPEC.md</a>
+    </p>
+  </div>
+</section>
+
+<!-- ── Quick Start ────────────────────────────────────────────────────── -->
+<section id="quickstart">
+  <div class="container">
+    <div class="section-label">// quick start</div>
+    <h2 class="section-title">Boot AIOS in 3 steps</h2>
+    <p class="section-desc">No build tools, no npm install, no internet required.</p>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:32px; align-items:start;">
+
+      <div>
+        <h3 style="font-size:.9rem; color:var(--accent); font-family:var(--mono); margin-bottom:16px; text-transform:uppercase; letter-spacing:.06em;">📱 Android (Termux)</h3>
+        <div class="qs-steps">
+          <div class="qs-step">
+            <div class="qs-num">1</div>
+            <div>
+              <h4>Install Node.js in Termux</h4>
+              <pre>pkg update && pkg install nodejs git</pre>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-num">2</div>
+            <div>
+              <h4>Clone the repository</h4>
+              <pre>git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE.git
+cd AIOSCPU-PROTYPE</pre>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-num">3</div>
+            <div>
+              <h4>Boot AIOS Lite</h4>
+              <pre>chmod +x aos
+./aos</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-size:.9rem; color:var(--accent2); font-family:var(--mono); margin-bottom:16px; text-transform:uppercase; letter-spacing:.06em;">🖥 Desktop (Linux / macOS / Windows)</h3>
+        <div class="qs-steps">
+          <div class="qs-step">
+            <div class="qs-num">1</div>
+            <div>
+              <h4>Clone the repository</h4>
+              <pre>git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE.git
+cd AIOSCPU-PROTYPE</pre>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-num">2</div>
+            <div>
+              <h4>Boot AIOS Lite</h4>
+              <pre>node aos</pre>
+            </div>
+          </div>
+          <div class="qs-step">
+            <div class="qs-num">3</div>
+            <div>
+              <h4>Start exploring</h4>
+              <pre>help          # list all commands
+cpu demo      # run Hello World on AIOSCPU
+svc list      # see running services</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Docs links ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">// documentation</div>
+    <h2 class="section-title">Go deeper</h2>
+    <div class="features-grid">
+      <a href="AIOSCPU-SPEC.md" class="feature-card" style="display:block; color:inherit;">
+        <div class="feature-icon">📐</div>
+        <h3>AIOSCPU Specification</h3>
+        <p>Full CPU & ISA specification — opcodes, memory map, registers, encoding format, and example programs.</p>
+      </a>
+      <a href="DEVELOPER.md" class="feature-card" style="display:block; color:inherit;">
+        <div class="feature-icon">🧑‍💻</div>
+        <h3>Developer Guide</h3>
+        <p>How to add commands, services, and CPU programs. Module interface contracts and extension patterns.</p>
+      </a>
+      <a href="https://github.com/Cbetts1/AIOSCPU-PROTYPE/blob/main/CONTRIBUTING.md" class="feature-card" style="display:block; color:inherit;" target="_blank" rel="noopener">
+        <div class="feature-icon">🤝</div>
+        <h3>Contributing</h3>
+        <p>Contribution guidelines — how to open issues, submit pull requests, and follow code standards.</p>
+      </a>
+      <a href="LEGAL.md" class="feature-card" style="display:block; color:inherit;">
+        <div class="feature-icon">⚖️</div>
+        <h3>Legal & IP</h3>
+        <p>Copyright, IP ownership, MIT License terms. AIOSCPU and AIOS Lite are original creations of Cbetts1.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-logo">AIOSCPU Prototype One — AIOS Lite</div>
+    <p>
+      Copyright &copy; 2026 <a href="https://github.com/Cbetts1" target="_blank" rel="noopener">Cbetts1</a>
+      &nbsp;·&nbsp; MIT License
+      &nbsp;·&nbsp; <a href="https://github.com/Cbetts1/AIOSCPU-PROTYPE" target="_blank" rel="noopener">GitHub</a>
+      &nbsp;·&nbsp; <a href="LEGAL.md">Legal</a>
+    </p>
+    <p style="margin-top:8px; font-size:.78rem; color:var(--border);">
+      AIOSCPU, AIOS Lite, and AIOS Prototype One are original creations of Cbetts1.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
