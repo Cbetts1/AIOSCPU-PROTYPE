@@ -237,12 +237,9 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
   // ── Trim history to MAX_HISTORY_TURNS ─────────────────────────────────────
   function _trimHistory(history) {
-    // Each turn = 2 messages (user + assistant)
-    const maxMessages = MAX_HISTORY_TURNS * 2;
-    if (history.length > maxMessages) {
-      return history.slice(history.length - maxMessages);
-    }
-    return history;
+    // Each turn = 2 messages (user + assistant).
+    // slice(-n) naturally handles arrays shorter than n, so no conditional needed.
+    return history.slice(-(MAX_HISTORY_TURNS * 2));
   }
 
   // ── Query AIOS (always-on personality) ───────────────────────────────────

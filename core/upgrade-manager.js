@@ -251,58 +251,67 @@ function createUpgradeManager(kernel, svcMgr, hostBridge, diagnostics, vfs) {
   }
 
   // ── Format the upgrade plan for display ───────────────────────────────────
+  // Box is exactly 62 chars wide between the ║ walls.
+  // _box(text) pads content to fill one box row.
+  const BOX_WIDTH = 62;
+  function _box(text) { return `║  ${text.padEnd(BOX_WIDTH - 2)}║`; }
+  const _sep  = `╠${'═'.repeat(BOX_WIDTH)}╣`;
+  const _top  = `╔${'═'.repeat(BOX_WIDTH)}╗`;
+  const _bot  = `╚${'═'.repeat(BOX_WIDTH)}╝`;
+
   async function _buildPlanDisplay() {
     const plan   = await getPlan();
     const lines  = [];
 
-    lines.push(`╔══════════════════════════════════════════════════════════════╗`);
-    lines.push(`║         AIOS Upgrade Manager v1.0.0 — System Status         ║`);
-    lines.push(`╠══════════════════════════════════════════════════════════════╣`);
+    lines.push(_top);
+    lines.push(_box('AIOS Upgrade Manager v1.0.0 — System Status'));
+    lines.push(_sep);
 
     // Components
     const comps = plan.checks.filter(c => c.category === 'component');
-    lines.push(`║  COMPONENTS (${comps.length} modules — all ${comps.every(c => c.status === 'current') ? 'current ✓' : 'check below'})                     ║`);
+    const compHeader = `COMPONENTS (${comps.length} modules — all ${comps.every(c => c.status === 'current') ? 'current ✓' : 'check below'})`;
+    lines.push(_box(compHeader));
     for (const c of comps) {
       const icon = c.status === 'current' ? '✓' : '⚠';
-      lines.push(`║  ${icon} ${c.name.padEnd(26)} v${c.current.padEnd(10)}                   ║`);
+      lines.push(_box(`${icon} ${c.name.padEnd(26)} v${c.current}`));
     }
 
     // Ollama
     const oll = plan.checks.find(c => c.category === 'ollama');
     if (oll) {
-      lines.push(`╠══════════════════════════════════════════════════════════════╣`);
+      lines.push(_sep);
       const icon = oll.status === 'current' ? '✓' : '✗';
-      lines.push(`║  ${icon} Ollama server  ${oll.current.padEnd(46)}║`);
+      lines.push(_box(`${icon} Ollama server  ${oll.current}`));
       if (oll.status !== 'current') {
-        lines.push(`║    → Run: ollama serve                                       ║`);
+        lines.push(_box('  → Run: ollama serve'));
       }
     }
 
     // Models
     const models = plan.checks.filter(c => c.category === 'model');
     if (models.length) {
-      lines.push(`╠══════════════════════════════════════════════════════════════╣`);
-      lines.push(`║  AI MODELS (phone-first — install at least one)              ║`);
+      lines.push(_sep);
+      lines.push(_box('AI MODELS (phone-first — install at least one)'));
       for (const m of models) {
         const icon = m.status === 'current' ? '✓' : '○';
         const size = `${m.sizeMB}MB`.padEnd(7);
-        lines.push(`║  ${icon} ${m.name.padEnd(16)} ${size}  ${m.purpose.slice(0, 28).padEnd(28)}║`);
+        lines.push(_box(`${icon} ${m.name.padEnd(16)} ${size}  ${m.purpose.slice(0, 28)}`));
         if (m.status !== 'current') {
-          lines.push(`║    → upgrade model ${m.name}                          `.slice(0, 65) + `║`);
+          lines.push(_box(`  → upgrade model ${m.name}`));
         }
       }
     }
 
     // Required actions
     if (plan.required.length) {
-      lines.push(`╠══════════════════════════════════════════════════════════════╣`);
-      lines.push(`║  ⚠ REQUIRED ACTIONS (${plan.required.length})                                      ║`);
+      lines.push(_sep);
+      lines.push(_box(`⚠ REQUIRED ACTIONS (${plan.required.length})`));
       for (const r of plan.required) {
-        lines.push(`║    • ${r.name}: ${r.status}`.padEnd(64) + `║`);
+        lines.push(_box(`  • ${r.name}: ${r.status}`));
       }
     }
 
-    lines.push(`╚══════════════════════════════════════════════════════════════╝`);
+    lines.push(_bot);
     return lines.join('\n');
   }
 

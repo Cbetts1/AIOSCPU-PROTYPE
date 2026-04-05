@@ -50,9 +50,13 @@ function createDiagnosticsEngine(kernel, hostBridge, opts) {
   // Support both the new 3-arg call and the old 6-arg call gracefully.
   // New: createDiagnosticsEngine(kernel, hostBridge, { pollIntervalMs })
   // Old: createDiagnosticsEngine(kernel, hostBridge, svcMgr, modelReg, portSrv, vfs)
-  const pollIntervalMs = (opts && typeof opts === 'object' && 'pollIntervalMs' in opts)
-    ? (typeof opts.pollIntervalMs === 'number' ? opts.pollIntervalMs : 60000)
-    : 60000;
+  function _resolvePollInterval(o) {
+    if (o && typeof o === 'object' && 'pollIntervalMs' in o) {
+      return typeof o.pollIntervalMs === 'number' ? o.pollIntervalMs : 60000;
+    }
+    return 60000;
+  }
+  const pollIntervalMs = _resolvePollInterval(opts);
 
   // ── Internal state ────────────────────────────────────────────────────────
   const _snapshots  = [];           // health history (ring buffer, max 100)

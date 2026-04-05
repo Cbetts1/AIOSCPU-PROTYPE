@@ -664,7 +664,9 @@ function start() {
       } else {
         bootMsg('ok', 'Upgrade: all components current  (run: upgrade plan for AI models)');
       }
-    }).catch(() => {});
+    }).catch(e => {
+      kernel.bus.emit('upgrade:check-error', { error: e.message });
+    });
 
     // ── CONSCIOUSNESS WARM-UP ────────────────────────────────────────────────
     // Discover models and start proactive assistance in the background.
