@@ -63,7 +63,7 @@ function createCollectiveIntelligence(kernel, memoryCore, filesystem) {
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   // Normalise text to a stable lookup key (lowercase, alphanum + spaces, truncated)
-  function _normalize(text) {
+  function _normalizeToTopicKey(text) {
     return String(text || '')
       .toLowerCase()
       .replace(/[^a-z0-9 ]/g, ' ')
@@ -74,7 +74,7 @@ function createCollectiveIntelligence(kernel, memoryCore, filesystem) {
 
   // Extract the key nouns/phrases from a prompt for topic matching
   function _extractTopics(text) {
-    const normalized = _normalize(text);
+    const normalized = _normalizeToTopicKey(text);
     // Split into 3-6 word windows to create multiple overlapping topic keys
     const words  = normalized.split(' ').filter(Boolean);
     const topics = new Set();
@@ -104,7 +104,7 @@ function createCollectiveIntelligence(kernel, memoryCore, filesystem) {
       query:    String(query).slice(0, 400),
       response: String(response).slice(0, MAX_PERSPECTIVE_CHARS * 2),
       ts:       new Date().toISOString(),
-      topic:    _normalize(query).slice(0, 60),
+      topic:    _normalizeToTopicKey(query).slice(0, 60),
     };
 
     // ── Per-model store ──────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ function createCollectiveIntelligence(kernel, memoryCore, filesystem) {
     if (!prompt || _topicIndex.size === 0) return '';
     _stats.contextBuilds++;
 
-    const normalized = _normalize(prompt);
+    const normalized = _normalizeToTopicKey(prompt);
 
     // Score every topic key against the current prompt
     const scored = [];
@@ -198,11 +198,11 @@ function createCollectiveIntelligence(kernel, memoryCore, filesystem) {
     );
 
     // Collect unique insights from the other models
-    const baseWords = new Set(_normalize(base.response).split(' '));
+    const baseWords = new Set(_normalizeToTopicKey(base.response).split(' '));
     const addIns    = [];
     for (const p of valid) {
       if (p.model === base.model) continue;
-      const otherWords  = _normalize(p.response).split(' ').filter(Boolean);
+      const otherWords  = _normalizeToTopicKey(p.response).split(' ').filter(Boolean);
       const uniqueWords = otherWords.filter(w => w.length > 4 && !baseWords.has(w));
       if (uniqueWords.length >= 3) {
         // This model added something meaningfully different — include a snippet
@@ -223,7 +223,7 @@ function createCollectiveIntelligence(kernel, memoryCore, filesystem) {
   // Return all stored perspectives on a topic (for the `collective recall` command).
   function recall(query) {
     _stats.recalls++;
-    const normalized = _normalize(query);
+    const normalized = _normalizeToTopicKey(query);
     const found      = [];
     const seen       = new Set();
 
