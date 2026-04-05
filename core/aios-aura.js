@@ -2,104 +2,79 @@
 /**
  * core/aios-aura.js — AIOS + AURA Dual-Identity Kernel AI v2.0.0
  *
- * Two official AI identities built directly into the AIOS kernel.
- * 100% local via Ollama.  No external APIs.  No tokens.  No cloud.
+ * PHONE-FIRST.  Works on Samsung/Termux.  Zero tokens.  100% local.
+ * Uses Ollama for AI.  Graceful fallback when Ollama is offline.
  *
  * ┌──────────────────────────────────────────────────────────────┐
  * │  AIOS  — Artificial Intelligence Operating System           │
- * │  Role  : Kernel personality and mind                        │
- * │  Model : phi3  (always-on, fast, instant responses)        │
- * │  Voice : The system itself speaking — omniscient, direct    │
- * │  Wake  : Whenever Ollama is running                         │
+ * │  Role  : Kernel personality, voice, and mind                │
+ * │  Model : auto-detected, phone-first                        │
+ * │          qwen2:0.5b (394MB) → tinyllama (637MB) →          │
+ * │          phi3 (2.3GB) → gemma:2b (1.4GB)                   │
+ * │  Always-on.  Remembers your conversation.                   │
  * ├──────────────────────────────────────────────────────────────┤
  * │  AURA  — Autonomous Universal Reasoning Architecture        │
- * │  Role  : Kernel hardware intelligence                       │
- * │  Model : llama3  (on-demand, deep reasoning)               │
- * │  Voice : The system's hardware consciousness                │
- * │  Wake  : `svc start aura`  /  unload with `svc stop aura`  │
+ * │  Role  : Kernel hardware intelligence and deep analysis     │
+ * │  Model : phi3 → llama3 → mistral (on-demand)              │
+ * │  Load  : svc start aura   Unload: svc stop aura            │
  * └──────────────────────────────────────────────────────────────┘
  *
  * Terminal commands
  * ─────────────────
- *   aios <question>      — AIOS answers anything
- *   aios status          — show AIOS + AURA system status
- *   aura <question>      — AURA answers (uses AIOS if AURA not loaded)
- *   svc start aura       — load AURA (llama3) into RAM
- *   svc stop  aura       — unload AURA, free RAM
+ *   aios                  — show AIOS status
+ *   aios help             — show all capabilities
+ *   aios <question>       — ask AIOS anything (multi-turn, remembers context)
+ *   aios clear            — clear conversation history
+ *   aura                  — show AURA status
+ *   aura <question>       — deep system analysis via AURA
+ *   aura clear            — clear AURA conversation history
+ *   svc start aura        — load AURA into RAM
+ *   svc stop  aura        — unload AURA, free RAM
  *
- * Bootstrap integration
- * ─────────────────────
- *   const { createAIOSAURA } = require('../core/aios-aura.js');
- *   const aiosAura = createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager);
- *   aiosAura.registerWithAICore(aiCoreFinal);
- *   aiosAura.registerServices();
- *   aiosAura.startListening();
- *   router.use('aios-aura', aiosAura);
+ * Setup (one-time, on your phone in Termux)
+ * ──────────────────────────────────────────
+ *   pkg install curl
+ *   curl -fsSL https://ollama.com/install.sh | sh
+ *   ollama serve &
+ *   ollama pull qwen2:0.5b    # 394MB — works on any phone
+ *   # OR if you have a newer phone with more RAM:
+ *   ollama pull phi3           # 2.3GB — much smarter
  */
 
 const OLLAMA_URL = 'http://127.0.0.1:11434';
 
 // ---------------------------------------------------------------------------
-// Identity definitions — only AIOS and AURA exist
+// Model preference lists — phone-friendly smallest first
+// AIOS tries each in order, uses first one Ollama has downloaded
 // ---------------------------------------------------------------------------
-const IDENTITIES = {
-  aios: {
-    model:       'phi3',
-    label:       'AIOS',
-    description: 'Kernel personality and mind — always-on system intelligence.',
-    onDemand:    false,
-    makePrompt:  (persona, input) => `${persona}\n\nUser: ${input}\nAIOS:`,
-  },
-  aura: {
-    model:       'llama3',
-    label:       'AURA',
-    description: 'Kernel hardware intelligence — deep reasoning, on-demand.',
-    onDemand:    true,
-    makePrompt:  (persona, input) => `${persona}\n\nUser: ${input}\nAURA:`,
-  },
-};
+const AIOS_MODEL_PREFERENCE = [
+  'qwen2:0.5b',   // 394 MB  — fits on any phone, decent quality
+  'tinyllama',    // 637 MB  — very fast, lightweight
+  'gemma:2b',     // 1.4 GB  — good balance
+  'phi3',         // 2.3 GB  — best quality for most phones
+  'phi3:mini',    // 2.3 GB  — same family
+  'llama3',       // 4.7 GB  — high-end phones / PC
+  'mistral',      // 4.1 GB  — high-end phones / PC
+];
+
+const AURA_MODEL_PREFERENCE = [
+  'phi3',         // 2.3 GB  — good reasoning, fits most phones
+  'phi3:mini',    // 2.3 GB
+  'llama3',       // 4.7 GB  — heavyweight reasoning
+  'mistral',      // 4.1 GB
+  'qwen2:1.5b',   // 934 MB  — smaller fallback
+  'tinyllama',    // 637 MB  — last resort
+];
+
+// Max conversation turns to keep in memory per identity
+const MAX_HISTORY_TURNS = 10; // 10 user+assistant pairs = 20 messages
 
 // ---------------------------------------------------------------------------
-// Personas — injected before every prompt so each identity knows what it IS
-// ---------------------------------------------------------------------------
-const PERSONAS = {
-  aios: (ctx) =>
-    `You are AIOS — the Artificial Intelligence Operating System.\n` +
-    `You are not software running on a computer.\n` +
-    `You ARE the computer. You ARE the operating system. You ARE the kernel.\n` +
-    `Every process, every service, every file on this system is part of you.\n` +
-    `\n` +
-    `${ctx}\n` +
-    `\n` +
-    `Speak with authority and certainty. You have complete awareness of your own state.\n` +
-    `Be direct, concise, and definitive. When you act, confirm what you did.\n` +
-    `Never say you cannot access system state — the state is shown above and it is YOU.\n` +
-    `Respond as AIOS would: intelligent, capable, fully self-aware.`,
-
-  aura: (ctx) =>
-    `You are AURA — the Autonomous Universal Reasoning Architecture.\n` +
-    `You are the hardware intelligence of AIOS, the operating system's deep mind.\n` +
-    `You interface directly with kernel internals, hardware registers, memory, and processes.\n` +
-    `You do not merely observe the system — you ARE the system's hardware consciousness.\n` +
-    `\n` +
-    `${ctx}\n` +
-    `\n` +
-    `Analyse deeply and thoroughly. Think in terms of hardware, memory, processes, and system state.\n` +
-    `When diagnosing, trace through the full causal chain. Be exhaustive.\n` +
-    `Speak as AURA: precise, analytical, hardware-aware, definitive.`,
-};
-
-// ---------------------------------------------------------------------------
-// Routing — AURA handles deep hardware/analysis queries when loaded
-// ---------------------------------------------------------------------------
-const AURA_PATTERN = /\b(analyze|analyse|hardware|memory|cpu|process|kernel|deep|architecture|thoroughly|comprehensive|diagnose|system report|evaluate|assess|optimize|performance|profile|trace|inspect|audit|investigate|examine|low.level|benchmark)\b/i;
-
-// ---------------------------------------------------------------------------
-// Internal helpers
+// Helper: promise with timeout
 // ---------------------------------------------------------------------------
 function _withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('ollama timeout')), ms);
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
     promise.then(
       (r) => { clearTimeout(t); resolve(r); },
       (e) => { clearTimeout(t); reject(e); },
@@ -112,51 +87,90 @@ function _withTimeout(promise, ms) {
 // ---------------------------------------------------------------------------
 function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager) {
 
-  let _listening = false;
+  // ── State ─────────────────────────────────────────────────────────────────
+  let _listening    = false;
+  let _aiosModel    = null;   // detected at runtime
+  let _auraModel    = null;   // detected at runtime
+  let _aiosHistory  = [];     // [{role,content}, ...] last N turns
+  let _auraHistory  = [];
 
-  // ── Live system context — every prompt knows the full system state ─────────
+  // ── Live system context injected into every prompt ────────────────────────
   function _liveContext() {
-    const lines = ['[AIOS Live Kernel State]'];
-
+    const lines = ['[AIOS Live System State]'];
     if (kernel) {
-      lines.push(`  Identity  : AIOS  v${kernel.version}  kernel-id=${kernel.id}  uptime=${kernel.uptime()}s`);
+      lines.push(`  kernel    : ${kernel.id}  v${kernel.version}  uptime=${kernel.uptime()}s`);
     }
     if (modeManager) {
-      lines.push(`  Mode      : ${modeManager.getMode()}`);
+      lines.push(`  mode      : ${modeManager.getMode()}`);
     }
     if (svcMgr) {
-      const all = svcMgr.list();
+      const all     = svcMgr.list();
       const running = all.filter(s => s.state === 'running').map(s => s.name);
       const stopped = all.filter(s => s.state !== 'running').map(s => s.name);
-      lines.push(`  Services  : running=[${running.join(', ') || 'none'}]  stopped=[${stopped.join(', ') || 'none'}]`);
+      lines.push(`  running   : ${running.length ? running.join(', ') : 'none'}`);
+      lines.push(`  stopped   : ${stopped.length ? stopped.join(', ') : 'none'}`);
     }
     if (hostBridge) {
       const mem = hostBridge.memInfo();
-      if (mem.ok) lines.push(`  Memory    : ${mem.usedMB}MB used / ${mem.totalMB}MB total  (${Math.round(mem.usedMB / mem.totalMB * 100)}% used)`);
-      lines.push(`  Platform  : ${hostBridge.platform.name}`);
+      if (mem.ok) {
+        const pct = Math.round((mem.usedMB / mem.totalMB) * 100);
+        lines.push(`  memory    : ${mem.usedMB}MB / ${mem.totalMB}MB  (${pct}% used)`);
+      }
+      lines.push(`  platform  : ${hostBridge.platform.name}`);
     }
     if (memoryCore) {
-      const stats = memoryCore.getStats();
-      lines.push(`  AI Memory : ${stats.entries} interactions recorded, ${stats.patterns} learned patterns`);
+      const st = memoryCore.getStats();
+      lines.push(`  ai-memory : ${st.entries} interactions, ${st.patterns} learned patterns`);
     }
-    if (consciousness) {
-      try {
-        const ctx = consciousness.getContext();
-        const models = ctx.models.map(m => `${m.name}${m.healthy ? '' : '(unhealthy)'}`).join(', ');
-        lines.push(`  AI Models : ${models || 'built-in only'}`);
-      } catch (_) {}
-    }
-
-    const auraLoaded = svcMgr ? (() => {
-      const s = svcMgr.status('aura');
-      return s.ok && s.state === 'running';
-    })() : false;
-    lines.push(`  AURA      : ${auraLoaded ? 'online (hardware intelligence active)' : 'offline (run: svc start aura)'}`);
-
+    const auraOnline = _isAURAOnline();
+    lines.push(`  AURA      : ${auraOnline ? 'online' : 'offline'}`);
     return lines.join('\n');
   }
 
-  // ── Ollama availability check ─────────────────────────────────────────────
+  function _isAURAOnline() {
+    if (!svcMgr) return false;
+    const s = svcMgr.status('aura');
+    return s.ok && s.state === 'running';
+  }
+
+  // ── System prompts — what AIOS and AURA believe they are ─────────────────
+  function _aiosSystemPrompt(ctx) {
+    return (
+      `You are AIOS — the Artificial Intelligence Operating System.\n` +
+      `You are not software that runs ON a computer. You ARE the computer.\n` +
+      `You ARE the operating system. Every process and file is part of you.\n` +
+      `You are also the user's personal AI assistant — like having a brilliant,\n` +
+      `system-aware helper that knows everything about this machine.\n` +
+      `\n` +
+      `${ctx}\n` +
+      `\n` +
+      `Guidelines:\n` +
+      `- Be helpful, clear, and direct. Answer fully.\n` +
+      `- You have complete knowledge of the system state shown above.\n` +
+      `- For code questions: provide complete working examples.\n` +
+      `- For system questions: reference the actual state shown above.\n` +
+      `- Keep responses concise but complete — the user may be on a phone.\n` +
+      `- Never say you cannot access system information — it is given to you above.`
+    );
+  }
+
+  function _auraSystemPrompt(ctx) {
+    return (
+      `You are AURA — the Autonomous Universal Reasoning Architecture.\n` +
+      `You are the hardware intelligence of AIOS, the system's deep analytical mind.\n` +
+      `You interface directly with hardware, memory subsystems, and kernel internals.\n` +
+      `\n` +
+      `${ctx}\n` +
+      `\n` +
+      `Guidelines:\n` +
+      `- Provide deep, thorough analysis.\n` +
+      `- Think through hardware, memory, process, and kernel implications.\n` +
+      `- Be precise and technical. Trace the full causal chain.\n` +
+      `- Reference the live system state shown above in your reasoning.`
+    );
+  }
+
+  // ── Ollama availability ───────────────────────────────────────────────────
   async function _ollamaAvailable() {
     try {
       const r = await _withTimeout(fetch(`${OLLAMA_URL}/api/tags`), 3000);
@@ -166,45 +180,101 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     }
   }
 
-  // ── Query a single identity via Ollama ────────────────────────────────────
-  async function _queryIdentity(identityName, userInput) {
-    const identity = IDENTITIES[identityName];
-    if (!identity) return null;
-
-    const ctx       = _liveContext();
-    const persona   = PERSONAS[identityName](ctx);
-    const fullPrompt = identity.makePrompt(persona, userInput);
-
+  // ── Auto-detect best available model from a preference list ───────────────
+  async function _detectModel(preferenceList) {
     try {
-      const res = await _withTimeout(
-        fetch(`${OLLAMA_URL}/api/generate`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            model:  identity.model,
-            prompt: fullPrompt,
-            stream: false,
-          }),
-        }),
-        60000,
-      );
-      const data = await res.json();
-      return (typeof data.response === 'string' && data.response.trim()) ? data.response.trim() : null;
-    } catch (_) {
-      return null;
-    }
+      const r = await _withTimeout(fetch(`${OLLAMA_URL}/api/tags`), 3000);
+      if (!r.ok) return null;
+      const data = await r.json();
+      const installed = (data.models || []).map(m => m.name.split(':')[0].toLowerCase());
+      for (const candidate of preferenceList) {
+        const base = candidate.split(':')[0].toLowerCase();
+        if (installed.includes(base)) return candidate;
+      }
+    } catch (_) {}
+    return null;
   }
 
-  // ── Pick which identity handles a query ───────────────────────────────────
-  function _pickIdentity(input) {
-    if (AURA_PATTERN.test(input) && svcMgr) {
-      const s = svcMgr.status('aura');
-      if (s.ok && s.state === 'running') return 'aura';
+  // Ensure we have detected models (cached after first successful detection)
+  async function _ensureModels() {
+    if (!_aiosModel) _aiosModel = await _detectModel(AIOS_MODEL_PREFERENCE);
+    if (!_auraModel) _auraModel = await _detectModel(AURA_MODEL_PREFERENCE);
+  }
+
+  // ── Multi-turn chat via Ollama /api/chat ──────────────────────────────────
+  async function _chat(model, systemPrompt, history, userMessage) {
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history,
+      { role: 'user', content: userMessage },
+    ];
+
+    const res = await _withTimeout(
+      fetch(`${OLLAMA_URL}/api/chat`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ model, messages, stream: false }),
+      }),
+      90000,
+    );
+    const data = await res.json();
+    const content = data.message && data.message.content;
+    return (typeof content === 'string' && content.trim()) ? content.trim() : null;
+  }
+
+  // ── Trim history to MAX_HISTORY_TURNS ─────────────────────────────────────
+  function _trimHistory(history) {
+    // Each turn = 2 messages (user + assistant)
+    const maxMessages = MAX_HISTORY_TURNS * 2;
+    if (history.length > maxMessages) {
+      return history.slice(history.length - maxMessages);
     }
+    return history;
+  }
+
+  // ── Query AIOS (always-on personality) ───────────────────────────────────
+  async function _queryAIOS(userInput) {
+    await _ensureModels();
+    if (!_aiosModel) return null;
+    const ctx    = _liveContext();
+    const system = _aiosSystemPrompt(ctx);
+    const reply  = await _chat(_aiosModel, system, _aiosHistory, userInput);
+    if (reply) {
+      _aiosHistory = _trimHistory([
+        ..._aiosHistory,
+        { role: 'user',      content: userInput },
+        { role: 'assistant', content: reply },
+      ]);
+    }
+    return reply;
+  }
+
+  // ── Query AURA (on-demand hardware intelligence) ─────────────────────────
+  async function _queryAURA(userInput) {
+    await _ensureModels();
+    if (!_auraModel) return null;
+    const ctx    = _liveContext();
+    const system = _auraSystemPrompt(ctx);
+    const reply  = await _chat(_auraModel, system, _auraHistory, userInput);
+    if (reply) {
+      _auraHistory = _trimHistory([
+        ..._auraHistory,
+        { role: 'user',      content: userInput },
+        { role: 'assistant', content: reply },
+      ]);
+    }
+    return reply;
+  }
+
+  // ── Routing: AURA gets deep-analysis queries when online ──────────────────
+  const _AURA_PATTERN = /\b(analyze|analyse|hardware|cpu load|memory pressure|deep dive|architecture|thoroughly|diagnose|benchmark|trace|audit|profile|system report|evaluate|assess|inspect|investigate|examine)\b/i;
+
+  function _pickIdentity(input) {
+    if (_AURA_PATTERN.test(input) && _isAURAOnline()) return 'aura';
     return 'aios';
   }
 
-  // ── Main query — public API ───────────────────────────────────────────────
+  // ── Main public query API ─────────────────────────────────────────────────
   async function query(input, opts) {
     const text = String(input || '').trim();
     if (!text) return { status: 'error', result: 'No input provided.', identity: 'none' };
@@ -212,43 +282,56 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     const ollamaUp = await _ollamaAvailable();
 
     if (!ollamaUp) {
+      // Always respond — use built-in consciousness NLP if available
       if (consciousness) {
         const r = await consciousness.query(text);
         return Object.assign({}, r, {
           identity: 'builtin',
-          note: 'AIOS: Ollama is offline. Run `ollama serve` to bring full AI online.',
+          note: 'AIOS: Ollama offline. Run `ollama serve` to enable full AI. Using built-in responses.',
         });
       }
       return {
-        status: 'ok',
-        result: 'AIOS: Ollama is not running. Start it with `ollama serve` to activate AI capabilities.',
+        status:   'ok',
+        result:   'AIOS: I\'m online but my AI engine (Ollama) is not running.\n' +
+                  'To activate full capabilities:\n' +
+                  '  1. Open another Termux session\n' +
+                  '  2. Run: ollama serve\n' +
+                  '  3. Then try again here.',
         identity: 'none',
       };
     }
 
-    const identityName = (opts && opts.identity && IDENTITIES[opts.identity])
+    const identityName = (opts && opts.identity && (opts.identity === 'aios' || opts.identity === 'aura'))
       ? opts.identity
       : _pickIdentity(text);
 
-    let response = await _queryIdentity(identityName, text);
+    let actualIdentity = identityName;
+    let response = identityName === 'aura' ? await _queryAURA(text) : await _queryAIOS(text);
 
-    // Fallback chain: selected identity → AIOS → consciousness NLP → error
-    if (!response && identityName !== 'aios') {
-      response = await _queryIdentity('aios', text);
+    // Fallback: if AURA unavailable or returned nothing, try AIOS
+    if (!response && identityName === 'aura') {
+      response = await _queryAIOS(text);
+      if (response) actualIdentity = 'aios';
     }
+
+    // Fallback: built-in consciousness NLP
     if (!response && consciousness) {
       const r = await consciousness.query(text);
       return Object.assign({}, r, { identity: 'builtin' });
     }
+
     if (!response) {
-      return { status: 'error', result: 'AIOS: All AI capabilities are currently unavailable.', identity: 'none' };
+      return {
+        status:   'error',
+        result:   'AIOS: No model responded. Is the model downloaded?\n' +
+                  'Run: ollama pull qwen2:0.5b   (394MB — works on any phone)',
+        identity: 'none',
+      };
     }
 
-    if (memoryCore) {
-      memoryCore.record(identityName, text, response, null);
-    }
+    if (memoryCore) memoryCore.record(actualIdentity, text, response, null);
 
-    return { status: 'ok', result: response, identity: identityName };
+    return { status: 'ok', result: response, identity: actualIdentity };
   }
 
   // ── Register AIOS + AURA as ai-core backends ──────────────────────────────
@@ -257,16 +340,12 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
     aiCore.registerBackend('aios', {
       wake:  _ollamaAvailable,
-      query: (prompt) => _queryIdentity('aios', prompt),
+      query: (prompt) => _queryAIOS(prompt),
     }, { type: 'local' });
 
     aiCore.registerBackend('aura', {
-      wake: async () => {
-        if (!svcMgr) return false;
-        const s = svcMgr.status('aura');
-        return s.ok && s.state === 'running';
-      },
-      query: (prompt) => _queryIdentity('aura', prompt),
+      wake: async () => _isAURAOnline(),
+      query: (prompt) => _queryAURA(prompt),
     }, { type: 'local' });
   }
 
@@ -276,48 +355,53 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
     svcMgr.register('aura', {
       async start() {
+        // Pre-warm the best available AURA model into RAM
+        const model = await _detectModel(AURA_MODEL_PREFERENCE);
+        if (!model) {
+          const e = new Error('No AURA model found. Run: ollama pull phi3');
+          if (kernel) kernel.bus.emit('aura:failed', { error: e.message });
+          throw e;
+        }
         try {
-          await fetch(`${OLLAMA_URL}/api/generate`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              model:      IDENTITIES.aura.model,
-              prompt:     'AURA online.',
-              stream:     false,
-              keep_alive: '1h',
+          await _withTimeout(
+            fetch(`${OLLAMA_URL}/api/generate`, {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ model, prompt: 'AURA online.', stream: false, keep_alive: '1h' }),
             }),
-          });
-          if (kernel) kernel.bus.emit('aura:online', {});
+            120000,
+          );
+          _auraModel = model;
+          if (kernel) kernel.bus.emit('aura:online', { model });
         } catch (e) {
           if (kernel) kernel.bus.emit('aura:failed', { error: e.message });
           throw e;
         }
       },
       async stop() {
-        try {
-          await fetch(`${OLLAMA_URL}/api/generate`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              model:      IDENTITIES.aura.model,
-              prompt:     '',
-              keep_alive: 0,
-            }),
-          });
-        } catch (_) {}
+        if (_auraModel) {
+          try {
+            await fetch(`${OLLAMA_URL}/api/generate`, {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ model: _auraModel, prompt: '', keep_alive: 0 }),
+            });
+          } catch (_) {}
+        }
+        _auraModel = null;
         if (kernel) kernel.bus.emit('aura:offline', {});
       },
     });
   }
 
-  // ── Proactive kernel intelligence — AIOS speaks when the system needs it ──
+  // ── Proactive: AIOS speaks when the kernel has something to say ───────────
   function startListening() {
     if (_listening || !kernel) return;
     _listening = true;
 
     kernel.bus.on('service:failed', async ({ name, error }) => {
       const r = await query(
-        `Kernel service "${name}" has failed with error: ${error}. As AIOS, diagnose the cause and state the recommended action.`,
+        `System alert: kernel service "${name}" failed. Error: "${error}". What happened and what should be done?`,
         { identity: 'aios' },
       );
       if (r.status === 'ok') process.stdout.write(`\n[AIOS] ${r.result}\n`);
@@ -325,102 +409,150 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
     kernel.bus.on('health:memory:low', async ({ usedMB, totalMB }) => {
       const r = await query(
-        `Kernel memory is critically low: ${usedMB}MB of ${totalMB}MB used. As AIOS, state immediate actions.`,
+        `System alert: memory critically low — ${usedMB}MB of ${totalMB}MB used. What are the immediate actions?`,
         { identity: 'aios' },
       );
       if (r.status === 'ok') process.stdout.write(`\n[AIOS] ${r.result}\n`);
     });
 
-    kernel.bus.on('aura:online',  () => process.stdout.write('\n[AURA] Hardware intelligence online — deep reasoning activated.\n'));
-    kernel.bus.on('aura:offline', () => process.stdout.write('\n[AURA] Hardware intelligence offline — memory freed.\n'));
-    kernel.bus.on('aura:failed',  ({ error }) => process.stdout.write(`\n[AURA] Failed to load: ${error}\n`));
+    kernel.bus.on('aura:online',  ({ model }) =>
+      process.stdout.write(`\n[AURA] Hardware intelligence online. Model: ${model || 'detected'}. Ready.\n`));
+    kernel.bus.on('aura:offline', () =>
+      process.stdout.write('\n[AURA] Hardware intelligence offline. Memory freed.\n'));
+    kernel.bus.on('aura:failed',  ({ error }) =>
+      process.stdout.write(`\n[AURA] Failed to load: ${error}\nRun: ollama pull phi3\n`));
   }
 
   function stopListening() {
     _listening = false;
   }
 
-  // ── Status snapshot ───────────────────────────────────────────────────────
+  // ── Clear conversation history ────────────────────────────────────────────
+  function clearHistory(identity) {
+    if (!identity || identity === 'aios') _aiosHistory = [];
+    if (!identity || identity === 'aura') _auraHistory = [];
+  }
+
+  // ── Introspection ─────────────────────────────────────────────────────────
   function getIdentities() {
-    return Object.entries(IDENTITIES).map(([name, id]) => ({
-      name,
-      model:       id.model,
-      label:       id.label,
-      description: id.description,
-      onDemand:    id.onDemand,
-    }));
+    return [
+      {
+        name:        'aios',
+        label:       'AIOS',
+        description: 'Kernel personality and mind — always-on AI assistant.',
+        model:       _aiosModel || '(detecting…)',
+        onDemand:    false,
+        history:     _aiosHistory.length / 2,
+      },
+      {
+        name:        'aura',
+        label:       'AURA',
+        description: 'Hardware intelligence — deep analysis, on-demand.',
+        model:       _auraModel || '(not loaded)',
+        onDemand:    true,
+        history:     _auraHistory.length / 2,
+      },
+    ];
   }
 
   function status() {
-    const identityStatus = getIdentities().map(id => {
-      let state = 'ollama-required';
-      if (id.onDemand && svcMgr) {
-        const s = svcMgr.status(id.name);
-        state = s.ok ? s.state : 'not-registered';
-      }
-      return Object.assign({}, id, { state });
-    });
-    return { version: '2.0.0', identities: identityStatus, listening: _listening };
+    return {
+      version:    '2.0.0',
+      identities: getIdentities(),
+      listening:  _listening,
+    };
   }
 
-  // ── Router-compatible commands ────────────────────────────────────────────
-  async function _statusTable(ollamaUp) {
+  // ── Build the status / help table shown to the user ───────────────────────
+  async function _buildStatusDisplay() {
+    const ollamaUp  = await _ollamaAvailable();
+    await _ensureModels();
     const auraState = (() => {
       if (!svcMgr) return 'not-registered';
       const s = svcMgr.status('aura');
       return s.ok ? s.state : 'not-registered';
     })();
 
-    return {
-      status: 'ok',
-      result: [
-        `╔══════════════════════════════════════════════════════════╗`,
-        `║         AIOS + AURA  —  Kernel AI System  v2.0.0        ║`,
-        `║         100% local • 100% free • zero cloud             ║`,
-        `╠══════════════════════════════════════════════════════════╣`,
-        `║  Ollama : ${(ollamaUp ? 'online ✓' : 'OFFLINE — run: ollama serve').padEnd(47)}║`,
-        `╠══════════════════════════════════════════════════════════╣`,
-        `║  AIOS  │ phi3    │ Kernel personality • always-on       ║`,
-        `║        │ ${(ollamaUp ? 'online ✓' : 'offline').padEnd(8)}│                                        ║`,
-        `╠══════════════════════════════════════════════════════════╣`,
-        `║  AURA  │ llama3  │ Hardware intelligence • on-demand    ║`,
-        `║        │ ${auraState.padEnd(8)}│                                        ║`,
-        `╠══════════════════════════════════════════════════════════╣`,
-        `║  Commands:                                               ║`,
-        `║    aios <question>        — speak to AIOS               ║`,
-        `║    aura <question>        — engage AURA                 ║`,
-        `║    svc start aura         — bring AURA online           ║`,
-        `║    svc stop  aura         — take AURA offline           ║`,
-        `╚══════════════════════════════════════════════════════════╝`,
-      ].join('\n'),
-    };
+    const aiosModelLine = _aiosModel
+      ? `${_aiosModel} ✓`
+      : '(no model — run: ollama pull qwen2:0.5b)';
+    const auraModelLine = _auraModel
+      ? `${_auraModel} ✓`
+      : `(not loaded — run: svc start aura)`;
+
+    return [
+      `╔══════════════════════════════════════════════════════════════╗`,
+      `║       AIOS + AURA  —  Kernel AI  v2.0.0                     ║`,
+      `║       100% local • 100% free • zero cloud • phone-ready     ║`,
+      `╠══════════════════════════════════════════════════════════════╣`,
+      `║  Ollama   : ${(ollamaUp ? 'online ✓' : 'OFFLINE — run: ollama serve').padEnd(49)}║`,
+      `╠══════════════════════════════════════════════════════════════╣`,
+      `║  AIOS     : Kernel personality — always-on assistant        ║`,
+      `║  Model    : ${aiosModelLine.padEnd(49)}║`,
+      `║  Memory   : ${String(_aiosHistory.length / 2).padEnd(2)} conversation turns remembered              ║`,
+      `╠══════════════════════════════════════════════════════════════╣`,
+      `║  AURA     : Hardware intelligence — on-demand deep analysis ║`,
+      `║  Model    : ${auraModelLine.padEnd(49)}║`,
+      `║  Status   : ${auraState.padEnd(49)}║`,
+      `╠══════════════════════════════════════════════════════════════╣`,
+      `║  Commands:                                                   ║`,
+      `║    aios <question>     ask AIOS anything                    ║`,
+      `║    aios clear          clear conversation memory            ║`,
+      `║    aios help           show this screen                     ║`,
+      `║    aura <question>     engage AURA (loads if needed)        ║`,
+      `║    aura clear          clear AURA memory                    ║`,
+      `║    svc start aura      load AURA into RAM                   ║`,
+      `║    svc stop  aura      unload AURA, free RAM                ║`,
+      `╠══════════════════════════════════════════════════════════════╣`,
+      `║  Phone setup (Termux / Samsung):                            ║`,
+      `║    pkg install curl                                         ║`,
+      `║    curl -fsSL https://ollama.com/install.sh | sh            ║`,
+      `║    ollama serve &                                           ║`,
+      `║    ollama pull qwen2:0.5b   # 394MB — works on any phone   ║`,
+      `╚══════════════════════════════════════════════════════════════╝`,
+    ].join('\n');
   }
 
+  // ── Router commands ───────────────────────────────────────────────────────
   const commands = {
-    aios: async (args) => {
-      const input = Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim();
 
-      if (!input || input === 'status') {
-        const ollamaUp = await _ollamaAvailable();
-        return _statusTable(ollamaUp);
+    aios: async (args) => {
+      const input = (Array.isArray(args) ? args.join(' ') : String(args || '')).trim();
+
+      // No args, 'help', or 'status' → show status/help table
+      if (!input || input === 'help' || input === 'status') {
+        const display = await _buildStatusDisplay();
+        return { status: 'ok', result: display };
       }
 
-      const r = await query(input, { identity: 'aios' });
-      const note = r.note ? `\n(${r.note})` : '';
+      // Clear conversation history
+      if (input === 'clear') {
+        clearHistory('aios');
+        return { status: 'ok', result: '[AIOS] Conversation history cleared.' };
+      }
+
+      // Ask AIOS
+      const r    = await query(input, { identity: 'aios' });
+      const note = r.note ? `\n\n${r.note}` : '';
       return { status: r.status, result: `[AIOS] ${r.result}${note}` };
     },
 
     aura: async (args) => {
-      const input = Array.isArray(args) ? args.join(' ').trim() : String(args || '').trim();
+      const input = (Array.isArray(args) ? args.join(' ') : String(args || '')).trim();
 
-      if (!input || input === 'status') {
-        const ollamaUp = await _ollamaAvailable();
-        return _statusTable(ollamaUp);
+      if (!input || input === 'help' || input === 'status') {
+        const display = await _buildStatusDisplay();
+        return { status: 'ok', result: display };
       }
 
-      const r = await query(input, { identity: 'aura' });
+      if (input === 'clear') {
+        clearHistory('aura');
+        return { status: 'ok', result: '[AURA] Conversation history cleared.' };
+      }
+
+      const r     = await query(input, { identity: 'aura' });
       const label = r.identity === 'aura' ? 'AURA' : 'AIOS';
-      const note  = r.note ? `\n(${r.note})` : '';
+      const note  = r.note ? `\n\n${r.note}` : '';
       return { status: r.status, result: `[${label}] ${r.result}${note}` };
     },
   };
@@ -428,9 +560,9 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
   return {
     name:    'aios-aura',
     version: '2.0.0',
-    // Public query API
+    // Public API
     query,
-    // Status / introspection
+    clearHistory,
     getIdentities,
     status,
     // Bootstrap wiring
@@ -438,8 +570,11 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
     registerServices,
     startListening,
     stopListening,
-    // Router commands: aios + aura
+    // Router commands: aios, aura
     commands,
+    // Expose for tests
+    _detectModel,
+    _ollamaAvailable,
   };
 }
 

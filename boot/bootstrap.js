@@ -57,14 +57,14 @@ const { createMirrorSession }   = require('../core/mirror-session.js');
 const { createIdentity }        = require('../core/identity.js');
 const { createMemoryCore }      = require('../core/memory-core.js');
 
-// ── Consciousness layer + Jarvis orchestrator ─────────────────────────────────
+// ── Consciousness layer + AIOS/AURA AI ───────────────────────────────────────
 const { createMemoryEngine }         = require('../core/memory-engine.js');
 const { createModeManager }          = require('../core/mode-manager.js');
 const { createModelRegistry }        = require('../core/model-registry.js');
 const { createDiagnosticsEngine }    = require('../core/diagnostics-engine.js');
 const { createPortServer }           = require('../core/port-server.js');
 const { createConsciousness }        = require('../core/consciousness.js');
-const { createJarvisOrchestrator }   = require('../core/jarvis-orchestrator.js');
+const { createAIOSAURA }             = require('../core/aios-aura.js');
 
 // ── New OS Integration Layer modules ─────────────────────────────────────────
 const { buildRootFS }           = require('../usr/lib/aios/rootfs-builder.js');
@@ -437,9 +437,8 @@ function start() {
   try { router.unregisterCommand('ai'); } catch (_) {}
   router.use('ai-core-final', aiCoreFinal);
 
-  // Jarvis backends and analyst-model service are registered later, after the
-  // consciousness layer, by jarvisOrchestrator.registerWithAICore() and
-  // jarvisOrchestrator.registerServices().  See section ── 20. JARVIS ──.
+  // AIOS and AURA backends are registered after the consciousness layer.
+  // See section ── 20. AIOS + AURA ──.
 
   // Register built-in services
   svcMgr.register('kernel-watchdog', {
@@ -544,28 +543,26 @@ function start() {
   router.use('consciousness', consciousness);
   bootMsg('ok', `Consciousness  v${consciousness.version}  online`);
 
-  // ── 20. JARVIS — Multi-Agent AI Orchestrator ───────────────────────────────
-  // 100 % local via Ollama.  No external APIs.  No tokens.  No cloud.
+  // ── 20. AIOS + AURA — Dual-Identity Kernel AI ────────────────────────────
+  // 100% local via Ollama.  No tokens.  No cloud.  Phone-first models.
   //
-  // Agents built in:
-  //   jarvis   — phi3              (fast, always-on, system-aware)
-  //   code     — deepseek-coder:6.7b  (code / debug queries)
-  //   analyst  — llama3            (deep reasoning, load on demand)
+  // AIOS — always-on kernel personality (qwen2:0.5b → tinyllama → phi3)
+  // AURA — on-demand hardware intelligence (phi3 → llama3 → mistral)
   //
-  // Terminal: `jarvis <question>`
-  //           `svc start analyst-model`  /  `svc stop analyst-model`
-  const jarvisOrchestrator = createJarvisOrchestrator(
+  // Terminal: `aios <question>`  |  `aura <question>`
+  //           `svc start aura`   |  `svc stop aura`
+  const aiosAura = createAIOSAURA(
     kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager,
   );
-  // Register jarvis/code/analyst backends into ai-core
-  jarvisOrchestrator.registerWithAICore(aiCoreFinal);
-  // Register analyst-model as a managed svc (svc start/stop analyst-model)
-  jarvisOrchestrator.registerServices();
-  // Mount `jarvis` command into the router
-  kernel.modules.load('jarvis-orchestrator', jarvisOrchestrator);
-  router.use('jarvis-orchestrator', jarvisOrchestrator);
-  bootMsg('ok', 'Jarvis Orchestrator v1.0.0  online  (agents: jarvis, code, analyst — via Ollama)');
-  bootMsg('info', '  → Run `jarvis status` to see agents.  Run `ollama serve` to activate AI.');
+  // Register AIOS + AURA as ai-core backends
+  aiosAura.registerWithAICore(aiCoreFinal);
+  // Register `aura` as a managed service (svc start/stop aura)
+  aiosAura.registerServices();
+  // Mount `aios` and `aura` commands into the router
+  kernel.modules.load('aios-aura', aiosAura);
+  router.use('aios-aura', aiosAura);
+  bootMsg('ok', 'AIOS + AURA  v2.0.0  online  (kernel AI — 100% local via Ollama)');
+  bootMsg('info', '  → `aios help` to see capabilities.  `ollama serve` to activate AI.');
 
   // 20e. Diagnostics Engine
   const diagnosticsEngine = createDiagnosticsEngine(kernel, hostBridge, svcMgr, modelRegistry, null, vfs);
@@ -603,7 +600,7 @@ function start() {
     vfs.append('/var/log/boot.log', `[${ts()}] AIOS shutdown after ${uptime}s\n`);
     memoryEngine.persist();
     consciousness.stopProactive();
-    jarvisOrchestrator.stopListening();
+    aiosAura.stopListening();
     portServer.stop().catch(() => {});
     svcMgr.stopAll().catch(() => {});
     procfs.stop();
@@ -633,8 +630,8 @@ function start() {
     svcMgr.start('host-info-logger').catch(() => {});
     svcMgr.start('procfs-updater').catch(() => {});
 
-    // Jarvis listens to kernel events (service failures, memory pressure, etc.)
-    jarvisOrchestrator.startListening();
+    // AIOS listens to kernel events (service failures, memory pressure, etc.)
+    aiosAura.startListening();
 
     scheduler.start();
     diagnostics.start();
