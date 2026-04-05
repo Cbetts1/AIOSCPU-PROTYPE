@@ -65,6 +65,7 @@ const { createDiagnosticsEngine }    = require('../core/diagnostics-engine.js');
 const { createPortServer }           = require('../core/port-server.js');
 const { createConsciousness }        = require('../core/consciousness.js');
 const { createAIOSAURA }             = require('../core/aios-aura.js');
+const { createRemoteMesh }           = require('../core/remote-mesh.js');
 const { createUpgradeManager }       = require('../core/upgrade-manager.js');
 
 // ── New OS Integration Layer modules ─────────────────────────────────────────
@@ -525,6 +526,18 @@ function start() {
   router.use('aios-aura', aiosAura);
   bootMsg('ok', 'AIOS + AURA  v2.0.0  online  (kernel AI — 100% local via Ollama)');
   bootMsg('info', '  → `aios help` for capabilities.  `ollama serve` to activate AI.');
+
+  // ── 23b. AI MESH — 7 open-source models wired as one brain ───────────────
+  // No API keys. No cloud. All Ollama. Phone sends ~1KB JSON, server does work.
+  // Set OLLAMA_HOST=http://<server>:11434 to offload to a home PC/server.
+  // Each agent has a specialty; AIOS routes queries to the right model.
+  // All responses flow through memory-core — system grows smarter over time.
+  const aiMesh = createRemoteMesh(kernel, memoryCore);
+  aiMesh.registerWithAICore(aiCoreFinal);
+  kernel.modules.load('remote-mesh', aiMesh);
+  router.use('remote-mesh', aiMesh);
+  bootMsg('ok', `AI Mesh  v${aiMesh.version}  online  (7 models — no keys, no cloud)`);
+  bootMsg('info', '  → `mesh status` to see agents.  `mesh help` for setup guide.');
 
   // ── 24. DIAGNOSTICS ENGINE ────────────────────────────────────────────────
   const diagnostics = createDiagnosticsEngine(kernel, hostBridge, { pollIntervalMs: 60000 });
