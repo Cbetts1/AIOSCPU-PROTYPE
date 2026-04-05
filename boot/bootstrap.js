@@ -442,6 +442,36 @@ function start() {
   try { router.unregisterCommand('ai'); } catch (_) {}
   router.use('ai-core-final', aiCoreFinal);
 
+  // ── JARVIS PERSONALITY ────────────────────────────────────────────────────
+  const JARVIS_SYSTEM = 'You are Jarvis, the AI core of AIOS. You have full awareness of: ' +
+    'the kernel event bus and running services, the virtual filesystem at /, ' +
+    'and CPU and memory state. Be direct, brief, and helpful. ' +
+    'When you act on the system, confirm what you did.';
+
+  // ── JARVIS LIGHTWEIGHT BACKEND (phi3 via Ollama) ──────────────────────────
+  aiCoreFinal.registerBackend('jarvis', {
+    wake: async () => {
+      try {
+        const r = await fetch('http://127.0.0.1:11434/api/tags');
+        return r.ok;
+      } catch (_) { return false; }
+    },
+    query: async (prompt) => {
+      const res = await fetch('http://127.0.0.1:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'phi3',
+          prompt: `${JARVIS_SYSTEM}\n\nUser: ${prompt}\nJarvis:`,
+          stream: false,
+        }),
+      });
+      const data = await res.json();
+      return data.response || null;
+    },
+  }, { type: 'local' });
+  bootMsg('ok', 'Jarvis backend registered  (phi3 via Ollama — start ollama to activate)');
+
   // Register built-in services
   svcMgr.register('kernel-watchdog', {
     _interval: null,
@@ -480,6 +510,56 @@ function start() {
     start() { procfs.start(); },
     stop()  { procfs.stop(); },
   });
+
+  // ── HEAVY MODEL SERVICE (llama3:70b via Ollama — on-demand) ───────────────
+  // Usage: svc start heavy-model  /  svc stop heavy-model
+  svcMgr.register('heavy-model', {
+    async start() {
+      try {
+        await fetch('http://127.0.0.1:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'llama3:70b',
+            prompt: 'ready',
+            stream: false,
+            keep_alive: '1h',
+          }),
+        });
+        kernel.bus.emit('heavy-model:ready', {});
+      } catch (e) {
+        kernel.bus.emit('heavy-model:failed', { error: e.message });
+        throw e;
+      }
+    },
+    async stop() {
+      try {
+        await fetch('http://127.0.0.1:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'llama3:70b', prompt: '', keep_alive: 0 }),
+        });
+      } catch (_) {}
+      kernel.bus.emit('heavy-model:stopped', {});
+    },
+  });
+
+  // ── HEAVY BACKEND — routes complex queries to llama3:70b when loaded ──────
+  aiCoreFinal.registerBackend('heavy', {
+    wake: async () => {
+      const s = svcMgr.status('heavy-model');
+      return s.ok && s.state === 'running';
+    },
+    query: async (prompt) => {
+      const res = await fetch('http://127.0.0.1:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'llama3:70b', prompt, stream: false }),
+      });
+      const data = await res.json();
+      return data.response || null;
+    },
+  }, { type: 'local' });
 
   bootMsg('ok', 'Service Manager  online');
 
