@@ -102,7 +102,7 @@ const ANALYST_PATTERN = /\b(analyze|analyse|explain in detail|compare|deep dive|
 function _withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('ollama timeout')), ms);
-    Promise.resolve(promise).then(
+    promise.then(
       (r) => { clearTimeout(t); resolve(r); },
       (e) => { clearTimeout(t); reject(e); },
     );
@@ -236,7 +236,7 @@ function createJarvisOrchestrator(kernel, svcMgr, hostBridge, memoryCore, consci
     }
 
     if (memoryCore) {
-      memoryCore.record('jarvis', text, response, null);
+      memoryCore.record(agentName, text, response, null);
     }
 
     return { status: 'ok', result: response, agent: agentName };

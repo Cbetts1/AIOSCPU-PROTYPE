@@ -225,14 +225,15 @@ describe('createJarvisOrchestrator', () => {
       expect(r.result).toBe('Hello from Jarvis');
     });
 
-    test('records response in memoryCore', async () => {
+    test('records response in memoryCore with correct agent type', async () => {
       mockFetchOllamaUp('Jarvis response');
       const { orchestrator, memoryCore } = makeOrchestrator();
-      await orchestrator.query('test input');
+      await orchestrator.query('hello jarvis');
       expect(memoryCore._records.length).toBeGreaterThan(0);
-      expect(memoryCore._records[0].type).toBe('jarvis');
-      expect(memoryCore._records[0].input).toBe('test input');
+      expect(memoryCore._records[0].input).toBe('hello jarvis');
       expect(memoryCore._records[0].output).toBe('Jarvis response');
+      // 'hello jarvis' has no code/analyst keywords → routes to jarvis agent
+      expect(memoryCore._records[0].type).toBe('jarvis');
     });
 
     test('agent defaults to jarvis for general input', async () => {
