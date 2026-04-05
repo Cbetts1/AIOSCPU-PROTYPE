@@ -368,16 +368,22 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
   _loadLearning();
 
   function _log(type, input, result, reasoning) {
+    const resultStr = typeof result === 'string' ? result.slice(0, 200) : String(result).slice(0, 200);
     const entry = {
       ts: new Date().toISOString(),
       type,
       input,
-      result: typeof result === 'string' ? result.slice(0, 200) : String(result).slice(0, 200),
+      result: resultStr,
       reasoning,
     };
     _decisionLog.push(entry);
     if (_decisionLog.length > 300) _decisionLog.shift();
     if (kernel) kernel.bus.emit('ai:decision', entry);
+    // Record into unified memory core so all model outputs are consolidated
+    if (memoryCore) {
+      const isError = type === 'fallback' || type === 'error';
+      memoryCore.record(type, input, resultStr, isError ? resultStr : null);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -596,6 +602,14 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
     for (const [name] of _backends) {
       if (_isTripped(name)) {
         _addSuggestion('backend:tripped', `AI backend "${name}" is circuit-tripped (too many failures). Will auto-reset in 5 min.`, null);
+      }
+    }
+
+    // Proactive suggestions — emit current memory-core suggestions on the kernel bus
+    if (memoryCore && kernel) {
+      const suggs = memoryCore.suggestions();
+      if (suggs.length && !suggs[0].startsWith('No proactive')) {
+        kernel.bus.emit('ai:suggestions', { suggestions: suggs });
       }
     }
   }
