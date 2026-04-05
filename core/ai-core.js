@@ -230,21 +230,26 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
   }
 
   // ---------------------------------------------------------------------------
+  // _withTimeout — race a promise against a timeout; clears timer on resolution
+  // ---------------------------------------------------------------------------
+  function _withTimeout(promise, ms, message) {
+    let timer = null;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  // ---------------------------------------------------------------------------
   // Dynamic model wake-up
   // ---------------------------------------------------------------------------
   async function _wakeModel(backend) {
     if (typeof backend.wake !== 'function') return true;
-    let timer;
     try {
-      await Promise.race([
-        backend.wake(),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('wake timeout')), 10000); }),
-      ]);
+      await _withTimeout(backend.wake(), 10000, 'wake timeout');
       return true;
     } catch (_) {
       return false;
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -264,15 +269,11 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
 
     for (const backend of ordered) {
       if (_isTripped(backend.name)) continue;
-      let timer;
       try {
         const awake = await _wakeModel(backend);
         if (!awake) { _recordBackendFailure(backend.name); continue; }
 
-        const result = await Promise.race([
-          backend.query(prompt),
-          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('query timeout')), 30000); }),
-        ]);
+        const result = await _withTimeout(backend.query(prompt), 30000, 'query timeout');
 
         if (result) {
           _recordBackendSuccess(backend.name);
@@ -280,8 +281,6 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
         }
       } catch (_) {
         _recordBackendFailure(backend.name);
-      } finally {
-        clearTimeout(timer);
       }
     }
     return null;

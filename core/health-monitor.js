@@ -20,6 +20,11 @@
  */
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+const LOW_MEMORY_THRESHOLD_MB = 50;
+
+// ---------------------------------------------------------------------------
 // HealthMonitor factory
 // ---------------------------------------------------------------------------
 function createHealthMonitor(kernel, network, hostBridge) {
@@ -166,7 +171,7 @@ function createHealthMonitor(kernel, network, hostBridge) {
     if (hostBridge) {
       try {
         const m = hostBridge.memInfo();
-        if (m.ok && m.freeMB < 50) {
+        if (m.ok && m.freeMB < LOW_MEMORY_THRESHOLD_MB) {
           _emit('health:memory:low', { freeMB: m.freeMB, totalMB: m.totalMB });
         }
       } catch (_) {}
