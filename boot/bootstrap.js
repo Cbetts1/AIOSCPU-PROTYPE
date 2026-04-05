@@ -57,19 +57,15 @@ const { createMirrorSession }   = require('../core/mirror-session.js');
 const { createIdentity }        = require('../core/identity.js');
 const { createMemoryCore }      = require('../core/memory-core.js');
 
-// ── New AIOS core components ─────────────────────────────────────────────────
-const { createMemoryEngine }     = require('../core/memory-engine.js');
-const { createModeManager }      = require('../core/mode-manager.js');
-const { createDiagnosticsEngine }= require('../core/diagnostics-engine.js');
-const { createPortServer }       = require('../core/port-server.js');
-
-// ── Consciousness layer modules ───────────────────────────────────────────────
-const { createMemoryEngine }    = require('../core/memory-engine.js');
-const { createModeManager }     = require('../core/mode-manager.js');
-const { createModelRegistry }   = require('../core/model-registry.js');
-const { createDiagnosticsEngine}= require('../core/diagnostics-engine.js');
-const { createPortServer }      = require('../core/port-server.js');
-const { createConsciousness }   = require('../core/consciousness.js');
+// ── Consciousness layer + AIOS/AURA AI ───────────────────────────────────────
+const { createMemoryEngine }         = require('../core/memory-engine.js');
+const { createModeManager }          = require('../core/mode-manager.js');
+const { createModelRegistry }        = require('../core/model-registry.js');
+const { createDiagnosticsEngine }    = require('../core/diagnostics-engine.js');
+const { createPortServer }           = require('../core/port-server.js');
+const { createConsciousness }        = require('../core/consciousness.js');
+const { createAIOSAURA }             = require('../core/aios-aura.js');
+const { createUpgradeManager }       = require('../core/upgrade-manager.js');
 
 // ── New OS Integration Layer modules ─────────────────────────────────────────
 const { buildRootFS }           = require('../usr/lib/aios/rootfs-builder.js');
@@ -442,6 +438,9 @@ function start() {
   try { router.unregisterCommand('ai'); } catch (_) {}
   router.use('ai-core-final', aiCoreFinal);
 
+  // AIOS and AURA backends are registered after the consciousness layer.
+  // See section ── 20. AIOS + AURA ──.
+
   // Register built-in services
   svcMgr.register('kernel-watchdog', {
     _interval: null,
@@ -484,30 +483,68 @@ function start() {
   bootMsg('ok', 'Service Manager  online');
 
   // ── 19. MEMORY ENGINE ─────────────────────────────────────────────────────
-  const memoryEngine = createMemoryEngine(kernel);
+  const memoryEngine = createMemoryEngine(kernel, vfs);
+  memoryEngine.load();  // restore persisted state if any
   kernel.modules.load('memory-engine', memoryEngine);
   router.use('memory-engine', memoryEngine);
-  bootMsg('ok', `Memory Engine v${memoryEngine.version}  online`);
+  bootMsg('ok', `Memory Engine  v${memoryEngine.version}  online`);
 
   // ── 20. MODE MANAGER ──────────────────────────────────────────────────────
   const modeManager = createModeManager(kernel, memoryEngine);
   kernel.modules.load('mode-manager', modeManager);
   router.use('mode-manager', modeManager);
-  bootMsg('ok', `Mode Manager v${modeManager.version}  mode=${modeManager.getMode()}`);
+  bootMsg('ok', `Mode Manager   v${modeManager.version}  default mode: ${modeManager.getMode()}`);
 
-  // ── 21. DIAGNOSTICS ENGINE ────────────────────────────────────────────────
+  // ── 21. MODEL REGISTRY ────────────────────────────────────────────────────
+  const modelRegistry = createModelRegistry(kernel, hostBridge, envLoader);
+  kernel.modules.load('model-registry', modelRegistry);
+  router.use('model-registry', modelRegistry);
+  bootMsg('info', 'Model Registry  discovering models…');
+
+  // ── 22. CONSCIOUSNESS ─────────────────────────────────────────────────────
+  const consciousness = createConsciousness(kernel, router, memoryEngine, modeManager, modelRegistry, aiCoreFinal);
+  kernel.modules.load('consciousness', consciousness);
+  router.use('consciousness', consciousness);
+  bootMsg('ok', `Consciousness  v${consciousness.version}  online`);
+
+  // Wire memoryCore into aiCore now that it's available
+  aiCoreFinal.setMemoryCore(memoryCore);
+
+  // ── 23. AIOS + AURA — Dual-Identity Kernel AI ────────────────────────────
+  // 100% local via Ollama.  No tokens.  No cloud.  Phone-first models.
+  // AIOS — always-on kernel personality (qwen2:0.5b → tinyllama → phi3)
+  // AURA — on-demand hardware intelligence (phi3 → llama3 → mistral)
+  // Terminal: `aios <question>`  |  `aura <question>`
+  //           `svc start aura`   |  `svc stop aura`
+  const aiosAura = createAIOSAURA(
+    kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager,
+  );
+  aiosAura.registerWithAICore(aiCoreFinal);
+  aiosAura.registerServices();
+  kernel.modules.load('aios-aura', aiosAura);
+  router.use('aios-aura', aiosAura);
+  bootMsg('ok', 'AIOS + AURA  v2.0.0  online  (kernel AI — 100% local via Ollama)');
+  bootMsg('info', '  → `aios help` for capabilities.  `ollama serve` to activate AI.');
+
+  // ── 24. DIAGNOSTICS ENGINE ────────────────────────────────────────────────
   const diagnostics = createDiagnosticsEngine(kernel, hostBridge, { pollIntervalMs: 60000 });
   kernel.modules.load('diagnostics-engine', diagnostics);
   router.use('diagnostics-engine', diagnostics);
   bootMsg('ok', `Diagnostics Engine v${diagnostics.version}  online`);
 
-  // ── 22. PORT SERVER ───────────────────────────────────────────────────────
-  const portServer = createPortServer(kernel, router, diagnostics);
+  // ── 25. PORT SERVER ───────────────────────────────────────────────────────
+  const portServer = createPortServer(kernel, router, consciousness, diagnostics);
   kernel.modules.load('port-server', portServer);
   router.use('port-server', portServer);
-  bootMsg('ok', `Port Server v${portServer.version}  ready  (port ${portServer.info().port})`);
+  bootMsg('ok', `Port Server    v${portServer.version}  ready (use: port start)`);
 
-  // ── 23. BOOT INIT (PID-1) ──────────────────────────────────────────────────
+  // ── 26. UPGRADE MANAGER ───────────────────────────────────────────────────
+  const upgradeMgr = createUpgradeManager(kernel, svcMgr, hostBridge, diagnostics, vfs);
+  kernel.modules.load('upgrade-manager', upgradeMgr);
+  router.use('upgrade-manager', upgradeMgr);
+  bootMsg('ok', `Upgrade Manager v${upgradeMgr.version}  online  (run: upgrade plan)`);
+
+  // ── 27. BOOT INIT (PID-1) ─────────────────────────────────────────────────
   const bootInit = createBootInit({
     kernel, vfs, cpu, hostBridge, perms,
     aiCore: aiCoreFinal, router, svcMgr, mirrorMgr,
@@ -518,46 +555,7 @@ function start() {
   router.use('boot-init', { commands: bootInit.coreInit.commands });
   router.use('service-runner', bootInit.svcRunner);
 
-  // ── 20. CONSCIOUSNESS LAYER ────────────────────────────────────────────────
-
-  // 20a. Memory Engine
-  const memoryEngine = createMemoryEngine(kernel, vfs);
-  memoryEngine.load();  // restore persisted state if any
-  kernel.modules.load('memory-engine', memoryEngine);
-  router.use('memory-engine', memoryEngine);
-  bootMsg('ok', `Memory Engine  v${memoryEngine.version}  online`);
-
-  // 20b. Mode Manager
-  const modeManager = createModeManager(kernel, memoryEngine);
-  kernel.modules.load('mode-manager', modeManager);
-  router.use('mode-manager', modeManager);
-  bootMsg('ok', `Mode Manager   v${modeManager.version}  default mode: ${modeManager.getMode()}`);
-
-  // 20c. Model Registry — discover available AI models
-  const modelRegistry = createModelRegistry(kernel, hostBridge, envLoader);
-  kernel.modules.load('model-registry', modelRegistry);
-  router.use('model-registry', modelRegistry);
-  bootMsg('info', 'Model Registry  discovering models…');
-
-  // 20d. Consciousness — central AI integration layer
-  const consciousness = createConsciousness(kernel, router, memoryEngine, modeManager, modelRegistry, aiCoreFinal);
-  kernel.modules.load('consciousness', consciousness);
-  router.use('consciousness', consciousness);
-  bootMsg('ok', `Consciousness  v${consciousness.version}  online`);
-
-  // 20e. Diagnostics Engine
-  const diagnosticsEngine = createDiagnosticsEngine(kernel, hostBridge, svcMgr, modelRegistry, null, vfs);
-  kernel.modules.load('diagnostics-engine', diagnosticsEngine);
-  router.use('diagnostics-engine', diagnosticsEngine);
-  bootMsg('ok', `Diagnostics    v${diagnosticsEngine.version}  online`);
-
-  // 20f. Port Server — single HTTP port, wired to consciousness + router
-  const portServer = createPortServer(kernel, router, consciousness, diagnosticsEngine);
-  kernel.modules.load('port-server', portServer);
-  router.use('port-server', portServer);
-  bootMsg('ok', `Port Server    v${portServer.version}  ready (use: port start)`);
-
-  // ── 21. SYSCALLS ───────────────────────────────────────────────────────────
+  // ── 27. SYSCALLS ──────────────────────────────────────────────────────────
   kernel.registerSyscall(2, (args) => { const r = vfs.read(String(args[0])); return r.ok ? r.content : null; });
   kernel.registerSyscall(3, (args) => { const r = vfs.write(String(args[0]), String(args[1] || '')); return r.ok ? r.bytes : -1; });
   kernel.registerSyscall(4, (args) => { const r = vfs.mkdir(String(args[0]), { parents: true }); return r.ok ? 0 : -1; });
@@ -576,17 +574,17 @@ function start() {
     return 0;
   });
 
-  // ── 22. SHUTDOWN HANDLER ───────────────────────────────────────────────────
+  // ── 28. SHUTDOWN HANDLER ──────────────────────────────────────────────────
   kernel.bus.on('kernel:shutdown', ({ uptime }) => {
     vfs.append('/var/log/boot.log', `[${ts()}] AIOS shutdown after ${uptime}s\n`);
     memoryEngine.persist();
     consciousness.stopProactive();
+    aiosAura.stopListening();
+    diagnostics.stop();
     portServer.stop().catch(() => {});
     svcMgr.stopAll().catch(() => {});
     procfs.stop();
     scheduler.stop();
-    diagnostics.stop();
-    portServer.stop().catch(() => {});
     mirrorMgr.list().forEach(m => { try { mirrorMgr.unmount(m.type); } catch (_) {} });
   });
 
@@ -601,7 +599,7 @@ function start() {
     process.stderr.write(`[AIOS] Unhandled rejection: ${r}\n`);
   });
 
-  // ── 23. RUN INIT SEQUENCE ──────────────────────────────────────────────────
+  // ── 29. RUN INIT SEQUENCE ─────────────────────────────────────────────────
   bootInit.boot().then(async () => {
     // Start services after init boot
     svcMgr.start('kernel-watchdog').catch(() => {});
@@ -609,6 +607,9 @@ function start() {
     svcMgr.start('ai-monitor').catch(() => {});
     svcMgr.start('host-info-logger').catch(() => {});
     svcMgr.start('procfs-updater').catch(() => {});
+
+    // AIOS listens to kernel events (service failures, memory pressure, etc.)
+    aiosAura.startListening();
 
     scheduler.start();
     diagnostics.start();
@@ -654,6 +655,18 @@ function start() {
     }
 
     process.stdout.write('  \x1b[35m[SELF-CHECK]\x1b[0m  Self-check complete\n');
+
+    // Run upgrade check in background — report any action-required items
+    upgradeMgr.checkUpgrades().then(checks => {
+      const required = checks.filter(c => c.status === 'action-required');
+      if (required.length) {
+        bootMsg('warn', `Upgrade: ${required.length} item(s) need attention — run: upgrade check`);
+      } else {
+        bootMsg('ok', 'Upgrade: all components current  (run: upgrade plan for AI models)');
+      }
+    }).catch(e => {
+      kernel.bus.emit('upgrade:check-error', { error: e.message });
+    });
 
     // ── CONSCIOUSNESS WARM-UP ────────────────────────────────────────────────
     // Discover models and start proactive assistance in the background.
