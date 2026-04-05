@@ -2,318 +2,320 @@
 /**
  * diagnostics-engine.js — AIOS Diagnostics Engine v1.0.0
  *
- * Provides comprehensive system diagnostics and health reporting for AIOS.
- *
- * Features:
- *   - System health checks (kernel, VFS, CPU, memory)
- *   - AI model validation (via model-registry)
- *   - Service health checks
- *   - Port server status
- *   - Full integration report generation
- *   - `diag` terminal command
- *
+ * Real-time system health monitoring, AI model tracking, and port monitoring.
+ * Phone-friendly: works without hostBridge, uses native os module for data.
  * Zero external npm dependencies.
+ *
+ * API
+ * ───
+ *   captureHealth()            — take a live OS health snapshot
+ *   getHealth()                — return last snapshot (or fresh if none)
+ *   getSnapshots(n)            — return last n snapshots from history
+ *   registerModel(name, url)   — register an AI model for tracking
+ *   reportModel(name, ok, ms)  — update model status (latency in ms)
+ *   getModels()                — list all registered models
+ *   registerPort(port, proto, label) — register a port for monitoring
+ *   reportPort(port, ok)       — update port status
+ *   getPorts()                 — list all registered ports
+ *   start()                    — start periodic health polling
+ *   stop()                     — stop polling
+ *   commands.diagnostics([..]) — terminal command handler
+ *
+ * Exported constants
+ * ──────────────────
+ *   STATUS.OK | WARN | FAIL | UNKNOWN
+ *
+ * Constructor
+ * ───────────
+ *   createDiagnosticsEngine(kernel, hostBridge, opts)
+ *   opts: { pollIntervalMs: 60000 }   — 0 = no polling
  */
 
 const os = require('os');
 
 // ---------------------------------------------------------------------------
-// Diagnostics Engine factory
+// Status constants
 // ---------------------------------------------------------------------------
-function createDiagnosticsEngine(kernel, hostBridge, svcMgr, modelRegistry, portServer, vfs) {
-  let _lastReport = null;
+const STATUS = {
+  OK:      'ok',
+  WARN:    'warn',
+  FAIL:    'fail',
+  UNKNOWN: 'unknown',
+};
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+function createDiagnosticsEngine(kernel, hostBridge, opts) {
+  // Support both the new 3-arg call and the old 6-arg call gracefully.
+  // New: createDiagnosticsEngine(kernel, hostBridge, { pollIntervalMs })
+  // Old: createDiagnosticsEngine(kernel, hostBridge, svcMgr, modelReg, portSrv, vfs)
+  const pollIntervalMs = (opts && typeof opts === 'object' && 'pollIntervalMs' in opts)
+    ? (typeof opts.pollIntervalMs === 'number' ? opts.pollIntervalMs : 60000)
+    : 60000;
 
+  // ── Internal state ────────────────────────────────────────────────────────
+  const _snapshots  = [];           // health history (ring buffer, max 100)
+  const _models     = new Map();    // name → model record
+  const _ports      = new Map();    // portNumber → port record
+  let   _lastSnap   = null;
+  let   _pollTimer  = null;
+  const MAX_SNAPS   = 100;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
   function _ts() { return new Date().toISOString(); }
 
-  function _mb(bytes) { return Math.round(bytes / 1024 / 1024); }
-
-  // ── System health check ───────────────────────────────────────────────────
-
+  // ── Health capture ────────────────────────────────────────────────────────
   /**
-   * Check core AIOS system health.
-   * @returns {{ ok: boolean, checks: object[] }}
+   * Take a live OS health snapshot.
+   * @returns {{ ts, uptime, status, cpu, memory }}
    */
-  function checkSystem() {
-    const checks = [];
+  function captureHealth() {
+    const totalBytes = os.totalmem();
+    const freeBytes  = os.freemem();
+    const usedBytes  = totalBytes - freeBytes;
+    const usedPct    = Math.round((usedBytes / totalBytes) * 100);
+    const cpus       = os.cpus();
+    const load       = os.loadavg();
+    const up         = kernel ? kernel.uptime() : Math.round(process.uptime());
 
-    // Kernel
-    checks.push({
-      name:   'kernel',
-      ok:     Boolean(kernel && kernel.isBooted()),
-      detail: kernel ? `v${kernel.version} uptime=${kernel.uptime()}s` : 'not available',
-    });
-
-    // VFS
-    const vfsCheck = vfs ? (() => {
-      try { const r = vfs.ls('/'); return r && (r.ok !== false); }
-      catch (_) { return false; }
-    })() : false;
-    checks.push({
-      name:   'vfs',
-      ok:     vfsCheck,
-      detail: vfsCheck ? 'mounted' : 'unavailable',
-    });
-
-    // Host bridge / memory
-    if (hostBridge) {
-      const m = hostBridge.memInfo();
-      checks.push({
-        name:   'host-memory',
-        ok:     m.ok,
-        detail: m.ok ? `${m.freeMB}MB free / ${m.totalMB}MB total (${m.usedPercent}% used)` : 'unavailable',
-      });
-    }
-
-    // Node.js process memory
-    const nodeHeap = process.memoryUsage();
-    checks.push({
-      name:   'node-heap',
-      ok:     true,
-      detail: `used=${_mb(nodeHeap.heapUsed)}MB / total=${_mb(nodeHeap.heapTotal)}MB rss=${_mb(nodeHeap.rss)}MB`,
-    });
-
-    // OS load average (Unix only)
-    const load = os.loadavg();
-    checks.push({
-      name:   'cpu-load',
-      ok:     load[0] < os.cpus().length * 2,  // warn if load > 2× cpu count
-      detail: `1m=${load[0].toFixed(2)} 5m=${load[1].toFixed(2)} 15m=${load[2].toFixed(2)} (${os.cpus().length} CPUs)`,
-    });
-
-    // Uptime
-    checks.push({
-      name:   'node-uptime',
-      ok:     true,
-      detail: `${Math.round(process.uptime())}s`,
-    });
-
-    const passed = checks.filter(c => c.ok).length;
-    return { ok: passed === checks.length, checks, passed, total: checks.length };
-  }
-
-  // ── Service health check ──────────────────────────────────────────────────
-
-  function checkServices() {
-    if (!svcMgr) return { ok: true, checks: [], note: 'service manager not available' };
-    const svcs = svcMgr.list();
-    const checks = svcs.map(s => ({
-      name:   s.name,
-      ok:     s.state === 'running',
-      detail: s.state,
-    }));
-    const failed = checks.filter(c => !c.ok);
-    return { ok: failed.length === 0, checks, failed: failed.length, total: checks.length };
-  }
-
-  // ── Model health check ────────────────────────────────────────────────────
-
-  async function checkModels() {
-    if (!modelRegistry) return { ok: true, checks: [], note: 'model registry not available' };
-    const models = modelRegistry.list();
-    const results = [];
-    for (const m of models) {
-      const v = await modelRegistry.validate(m.name);
-      results.push({
-        name:   m.name,
-        ok:     v.ok,
-        score:  v.score,
-        detail: `score=${v.score}% type=${m.type} modes=${m.modes.join(',')}`,
-      });
-    }
-    const healthy = results.filter(r => r.ok).length;
-    return { ok: healthy > 0, checks: results, healthy, total: results.length };
-  }
-
-  // ── Port server check ─────────────────────────────────────────────────────
-
-  function checkPortServer() {
-    if (!portServer) return { ok: false, detail: 'port server not initialised' };
-    const s = portServer.status();
-    return {
-      ok:     s.started,
-      detail: s.started
-        ? `listening on port ${s.port} — ${s.requests} requests served`
-        : 'stopped',
+    const snap = {
+      ts:      _ts(),
+      uptime:  up,
+      status:  usedPct > 90 ? STATUS.WARN : STATUS.OK,
+      cpu: {
+        cores:    cpus.length,
+        model:    (cpus[0] && cpus[0].model) ? cpus[0].model : 'unknown',
+        loadAvg1: parseFloat(load[0].toFixed(2)),
+        loadAvg5: parseFloat(load[1].toFixed(2)),
+      },
+      memory: {
+        totalMB: Math.round(totalBytes / 1024 / 1024),
+        usedMB:  Math.round(usedBytes  / 1024 / 1024),
+        freeMB:  Math.round(freeBytes  / 1024 / 1024),
+        usedPct,
+      },
     };
+
+    _snapshots.push(snap);
+    if (_snapshots.length > MAX_SNAPS) _snapshots.shift();
+    _lastSnap = snap;
+    if (kernel) kernel.bus.emit('diagnostics:health', snap);
+    return snap;
   }
 
-  // ── Full diagnostics run ──────────────────────────────────────────────────
+  /**
+   * Return last captured snapshot, or capture a fresh one if none exists.
+   */
+  function getHealth() {
+    return _lastSnap || captureHealth();
+  }
 
   /**
-   * Run all diagnostic checks.
-   * @returns {Promise<object>} Diagnostics result object
+   * Return last n snapshots from history.
+   * @param {number} n - max number of snapshots to return
    */
-  async function runDiagnostics() {
-    const started = _ts();
+  function getSnapshots(n) {
+    const count = (typeof n === 'number' && n > 0) ? n : _snapshots.length;
+    return _snapshots.slice(-count);
+  }
 
-    const system   = checkSystem();
-    const services = checkServices();
-    const models   = await checkModels();
-    const port     = checkPortServer();
+  // ── Model monitoring ──────────────────────────────────────────────────────
+  /**
+   * Register an AI model for health tracking.
+   * @param {string} name     — model name (e.g. 'llama3', 'phi3')
+   * @param {string} endpoint — Ollama endpoint URL
+   */
+  function registerModel(name, endpoint) {
+    _models.set(name, {
+      name,
+      endpoint:  endpoint || '',
+      status:    STATUS.UNKNOWN,
+      latencyMs: null,
+      lastCheck: null,
+    });
+  }
 
-    const allOk = system.ok && services.ok && models.ok;
+  /**
+   * Report the current health of a registered model.
+   * @param {string}  name      — model name
+   * @param {boolean} healthy   — true = reachable, false = failed
+   * @param {number}  [latencyMs] — optional response latency
+   * @returns {{ ok: boolean, error?: string }}
+   */
+  function reportModel(name, healthy, latencyMs) {
+    if (!_models.has(name)) {
+      return { ok: false, error: `Model "${name}" not registered` };
+    }
+    const m     = _models.get(name);
+    m.status    = healthy ? STATUS.OK : STATUS.FAIL;
+    m.latencyMs = (latencyMs !== undefined && latencyMs !== null) ? latencyMs : null;
+    m.lastCheck = _ts();
+    if (kernel) kernel.bus.emit('diagnostics:model', {
+      name: m.name, status: m.status, latencyMs: m.latencyMs,
+    });
+    return { ok: true };
+  }
 
-    const result = {
-      ts:       started,
-      healthy:  allOk,
-      system,
-      services,
-      models,
+  /** Return all registered models as an array. */
+  function getModels() {
+    return Array.from(_models.values());
+  }
+
+  // ── Port monitoring ───────────────────────────────────────────────────────
+  /**
+   * Register a port for health tracking.
+   * @param {number} port     — port number
+   * @param {string} protocol — 'tcp' | 'udp'
+   * @param {string} label    — human-readable description
+   */
+  function registerPort(port, protocol, label) {
+    _ports.set(port, {
       port,
-    };
-
-    _lastReport = result;
-    if (kernel) kernel.bus.emit('diagnostics:run', { healthy: allOk, ts: started });
-    return result;
+      protocol:  protocol || 'tcp',
+      label:     label    || '',
+      status:    STATUS.UNKNOWN,
+      lastCheck: null,
+    });
   }
-
-  // ── Report generation ─────────────────────────────────────────────────────
 
   /**
-   * Generate a human-readable integration report.
-   * @returns {Promise<string>}
+   * Report the current status of a registered port.
+   * @param {number}  port    — port number
+   * @param {boolean} healthy — true = open / reachable, false = failed
+   * @returns {{ ok: boolean, error?: string }}
    */
-  async function generateReport() {
-    const diag = await runDiagnostics();
-    const lines = [];
-
-    const line = (t) => lines.push(t);
-    const sep  = () => line('─'.repeat(60));
-    const tick = (ok) => ok ? '✓' : '✗';
-
-    line('');
-    line('╔══════════════════════════════════════════════════════════╗');
-    line('║          AIOS Integration & Diagnostics Report          ║');
-    line(`║  Generated : ${diag.ts.replace('T', ' ').slice(0, 19).padEnd(44)}║`);
-    line('╚══════════════════════════════════════════════════════════╝');
-    line('');
-
-    // System health
-    line('SYSTEM HEALTH');
-    sep();
-    diag.system.checks.forEach(c => {
-      line(`  ${tick(c.ok)}  ${c.name.padEnd(20)}  ${c.detail}`);
+  function reportPort(port, healthy) {
+    if (!_ports.has(port)) {
+      return { ok: false, error: `Port ${port} not registered` };
+    }
+    const p   = _ports.get(port);
+    p.status    = healthy ? STATUS.OK : STATUS.FAIL;
+    p.lastCheck = _ts();
+    if (kernel) kernel.bus.emit('diagnostics:port', {
+      port: p.port, status: p.status, protocol: p.protocol,
     });
-    line(`  Result: ${diag.system.passed}/${diag.system.total} checks passed`);
-    line('');
-
-    // Models
-    line('AI MODELS');
-    sep();
-    if (diag.models.checks.length === 0) {
-      line('  No models registered.');
-    } else {
-      diag.models.checks.forEach(c => {
-        line(`  ${tick(c.ok)}  ${c.name.padEnd(32)}  ${c.detail}`);
-      });
-      line(`  Result: ${diag.models.healthy}/${diag.models.total} models healthy`);
-    }
-    line('');
-
-    // Services
-    line('SERVICES');
-    sep();
-    if (diag.services.checks.length === 0) {
-      line('  No services registered.');
-    } else {
-      diag.services.checks.forEach(c => {
-        line(`  ${tick(c.ok)}  ${c.name.padEnd(30)}  ${c.detail}`);
-      });
-      line(`  Result: ${diag.services.total - diag.services.failed}/${diag.services.total} services running`);
-    }
-    line('');
-
-    // Port Server
-    line('PORT SERVER');
-    sep();
-    line(`  ${tick(diag.port.ok)}  ${diag.port.detail}`);
-    line('');
-
-    // Overall
-    line('OVERALL STATUS');
-    sep();
-    line(`  System health : ${diag.healthy ? '✓ HEALTHY' : '✗ DEGRADED'}`);
-    line('');
-
-    return lines.join('\n');
+    return { ok: true };
   }
 
-  // ── Last report accessor ───────────────────────────────────────────────────
+  /** Return all registered ports as an array. */
+  function getPorts() {
+    return Array.from(_ports.values());
+  }
 
-  function getLastReport() { return _lastReport; }
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  /** Start periodic health polling (no-op if pollIntervalMs is 0). */
+  function start() {
+    if (_pollTimer || !pollIntervalMs) return;
+    _pollTimer = setInterval(captureHealth, pollIntervalMs);
+  }
 
-  // ── Router command interface ───────────────────────────────────────────────
+  /** Stop periodic polling and clear the timer. */
+  function stop() {
+    if (_pollTimer) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
+  }
 
+  // ── Terminal commands ─────────────────────────────────────────────────────
   const commands = {
-    async diag(args) {
-      const sub = (args[0] || 'run').toLowerCase();
+    diagnostics(args) {
+      const sub = (Array.isArray(args) ? (args[0] || '') : String(args || '')).toLowerCase();
 
-      if (sub === 'run' || sub === 'check') {
-        const d = await runDiagnostics();
-        const systemIcon  = d.system.ok   ? '✓' : '✗';
-        const modelsIcon  = d.models.ok   ? '✓' : '✗';
-        const svcsIcon    = d.services.ok ? '✓' : '✗';
-        const portIcon    = d.port.ok     ? '✓' : '✗';
+      // ── status ────────────────────────────────────────────────────────────
+      if (!sub || sub === 'status') {
+        const h = getHealth();
         return {
           status: 'ok',
           result: [
-            `Diagnostics — ${d.ts}`,
-            `  ${systemIcon} System   : ${d.system.passed}/${d.system.total} checks`,
-            `  ${modelsIcon} Models   : ${d.models.healthy}/${d.models.total} healthy`,
-            `  ${svcsIcon} Services : ${d.services.total - d.services.failed}/${d.services.total} running`,
-            `  ${portIcon} Port     : ${d.port.detail}`,
-            '',
-            `Overall: ${d.healthy ? '✓ HEALTHY' : '✗ DEGRADED'}`,
+            `Diagnostics Engine v1.0.0`,
+            `  Uptime : ${h.uptime}s`,
+            `  CPU    : ${h.cpu.cores} cores  load=${h.cpu.loadAvg1}`,
+            `  Memory : ${h.memory.usedMB}/${h.memory.totalMB} MB (${h.memory.usedPct}% used)`,
+            `  Models : ${_models.size} registered`,
+            `  Ports  : ${_ports.size} registered`,
+            `  History: ${_snapshots.length} snapshots`,
           ].join('\n'),
         };
       }
 
-      if (sub === 'report') {
-        const report = await generateReport();
-        return { status: 'ok', result: report };
+      // ── check ─────────────────────────────────────────────────────────────
+      if (sub === 'check') {
+        const h = captureHealth();
+        return {
+          status: 'ok',
+          result: [
+            `Health check complete  (${h.ts})`,
+            `  CPU    : ${h.cpu.cores} cores  load=${h.cpu.loadAvg1}`,
+            `  Memory : ${h.memory.usedMB}/${h.memory.totalMB} MB (${h.memory.usedPct}% used)`,
+            `  Status : ${h.status}`,
+          ].join('\n'),
+        };
       }
 
-      if (sub === 'system') {
-        const s = checkSystem();
-        const lines = s.checks.map(c => `  ${c.ok ? '✓' : '✗'} ${c.name.padEnd(20)} ${c.detail}`);
-        return { status: 'ok', result: ['System health:', ...lines].join('\n') };
+      // ── history ───────────────────────────────────────────────────────────
+      if (sub === 'history') {
+        const n     = parseInt((Array.isArray(args) ? args[1] : null) || '10', 10);
+        const snaps = getSnapshots(isNaN(n) ? 10 : n);
+        if (!snaps.length) return { status: 'ok', result: 'Health history: no snapshots yet.' };
+        const lines = snaps.map(s =>
+          `  ${s.ts.slice(11, 19)}  cpu=${s.cpu.loadAvg1}  mem=${s.memory.usedPct}%  ${s.status}`);
+        return {
+          status: 'ok',
+          result: [`Health history (${snaps.length} entries):`, ...lines].join('\n'),
+        };
       }
 
-      if (sub === 'services') {
-        const s = checkServices();
-        if (!s.checks.length) return { status: 'ok', result: 'No services.' };
-        const lines = s.checks.map(c => `  ${c.ok ? '✓' : '✗'} ${c.name.padEnd(30)} ${c.detail}`);
-        return { status: 'ok', result: ['Services:', ...lines].join('\n') };
-      }
-
+      // ── models ────────────────────────────────────────────────────────────
       if (sub === 'models') {
-        const m = await checkModels();
-        if (!m.checks.length) return { status: 'ok', result: 'No models.' };
-        const lines = m.checks.map(c => `  ${c.ok ? '✓' : '✗'} ${c.name.padEnd(32)} ${c.detail}`);
+        const mods = getModels();
+        if (!mods.length) return { status: 'ok', result: 'No models registered.' };
+        const icon  = (s) => s === STATUS.OK ? '✓' : s === STATUS.FAIL ? '✗' : '?';
+        const lines = mods.map(m =>
+          `  ${icon(m.status)} ${m.name.padEnd(30)} ${m.status}${m.latencyMs !== null ? ` ${m.latencyMs}ms` : ''}`);
         return { status: 'ok', result: ['Models:', ...lines].join('\n') };
       }
 
+      // ── ports ─────────────────────────────────────────────────────────────
+      if (sub === 'ports') {
+        const ports = getPorts();
+        if (!ports.length) return { status: 'ok', result: 'No ports registered.' };
+        const icon  = (s) => s === STATUS.OK ? '✓' : s === STATUS.FAIL ? '✗' : '?';
+        const lines = ports.map(p =>
+          `  ${icon(p.status)} ${String(p.port).padEnd(8)} ${p.protocol.padEnd(6)} ${p.label}  ${p.status}`);
+        return { status: 'ok', result: ['Ports:', ...lines].join('\n') };
+      }
+
+      // ── fallthrough ───────────────────────────────────────────────────────
       return {
         status: 'ok',
-        result: 'Usage: diag <run|report|system|services|models>',
+        result: 'Usage: diagnostics <status|check|history [n]|models|ports>',
       };
     },
   };
 
   return {
-    name:           'diagnostics-engine',
-    version:        '1.0.0',
-    checkSystem,
-    checkServices,
-    checkModels,
-    checkPortServer,
-    runDiagnostics,
-    generateReport,
-    getLastReport,
+    name:    'diagnostics-engine',
+    version: '1.0.0',
+    // Health
+    captureHealth,
+    getHealth,
+    getSnapshots,
+    // Model monitoring
+    registerModel,
+    reportModel,
+    getModels,
+    // Port monitoring
+    registerPort,
+    reportPort,
+    getPorts,
+    // Lifecycle
+    start,
+    stop,
+    // Router commands
     commands,
   };
 }
 
-module.exports = { createDiagnosticsEngine };
+module.exports = { createDiagnosticsEngine, STATUS };

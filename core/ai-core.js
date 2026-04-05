@@ -171,11 +171,15 @@ function _classifyComplexity(text, parsedIntent) {
 // AI Core factory
 // ---------------------------------------------------------------------------
 // filesystem (optional 5th arg) enables persistent context and learning via VFS.
+// memoryCore is an internal reference; wire via setMemoryCore() if needed.
 function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
   const _decisionLog = [];
   let   _monitorActive = false;
   let   _monitorInterval = null;
   let   _stats = { queries: 0, resolved: 0, fallbacks: 0, autonomous: 0, suggestions: 0 };
+  // Memory core — optional, used for consolidated decision recording and suggestions.
+  // Defaults to null so all `if (memoryCore)` guards are safe without a wired instance.
+  let   memoryCore = null;
 
   // Multi-backend registry: name → { name, query, wake, type ('local'|'remote') }
   const _backends = new Map();
@@ -698,6 +702,7 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
     registerBackend,
     setBackend,
     setHealthMonitor,
+    setMemoryCore:    (mc) => { memoryCore = mc; },
     startMonitor,
     stopMonitor,
     isMonitoring:     () => _monitorActive,
