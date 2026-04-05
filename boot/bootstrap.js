@@ -598,8 +598,6 @@ function start() {
 
     process.stdout.write('  \x1b[35m[SELF-CHECK]\x1b[0m  Self-check complete\n');
 
-    scheduler.start();
-
     // ── 27. TERMINAL ────────────────────────────────────────────────────────
     process.stdout.write('\n');
     bootMsg('ok', 'All systems online — AIOS is the platform — handing control to terminal\n');
