@@ -4,10 +4,14 @@
   "description": "AIOSCPU Prototype One – AIOS Lite, Termux-bootable standalone OS",
   "main": "boot/boot.js",
   "scripts": {
-    "start": "node aos"
+    "start": "node aos",
+    "test": "jest --verbose"
   },
   "license": "MIT",
   "engines": {
     "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }
