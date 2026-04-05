@@ -59,6 +59,13 @@ const { createEnvLoader }       = require('../usr/lib/aios/env-loader.js');
 // ── Terminal ─────────────────────────────────────────────────────────────────
 const { createTerminal }        = require('../terminal/terminal.js');
 
+// ── Self-kernel + loop engine (wraps existing; does not replace) ─────────────
+const selfKernelBoot  = require('../usr/lib/aios/self-kernel/boot.js');
+const selfKernelSvcs  = require('../usr/lib/aios/self-kernel/services.js');
+const selfKernelProcs = require('../usr/lib/aios/self-kernel/process-model.js');
+const envMode         = require('../usr/lib/aios/env-kernel/mode.js');
+const loopCtrl        = require('../usr/lib/aios/loop/control.js');
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -319,7 +326,8 @@ function start() {
 
   // Kernel debug commands
   router.registerCommand('kernel', (args) => {
-    const sub = (args[0] || '').toLowerCase();
+    const sub  = (args[0] || '').toLowerCase();
+    const sub2 = (args[1] || '').toLowerCase();
     if (sub === 'info') {
       return {
         status: 'ok',
@@ -341,7 +349,28 @@ function start() {
       const r = kernel.syscall(num, args.slice(2));
       return { status: 'ok', result: JSON.stringify(r) };
     }
-    return { status: 'ok', result: 'Usage: kernel <info|syscall <num> [args...]>' };
+    // kernel mode — show current host mode + kernel id
+    if (sub === 'mode') {
+      const skIdentity = require('../usr/lib/aios/self-kernel/identity.js');
+      return {
+        status: 'ok',
+        result: [
+          `Host mode  : ${envMode.getMode()}`,
+          `Kernel ID  : ${skIdentity.getKernelId()}`,
+          `Version    : ${skIdentity.getVersion()}`,
+          `Build ID   : ${skIdentity.getBuildId()}`,
+        ].join('\n'),
+      };
+    }
+    // kernel switch self | mirror
+    if (sub === 'switch') {
+      if (!sub2) return { status: 'error', result: 'Usage: kernel switch <self|mirror>' };
+      const r = envMode.switchMode(sub2);
+      return r.ok
+        ? { status: 'ok',    result: `Host mode switched to "${r.mode}".` }
+        : { status: 'error', result: r.error };
+    }
+    return { status: 'ok', result: 'Usage: kernel <info|syscall <num> [args...]|mode|switch <self|mirror>>' };
   });
 
   // Host Bridge commands
@@ -501,6 +530,37 @@ function start() {
         return 0;
       };
     }
+
+    // ── SELF-KERNEL ATTACHMENT ─────────────────────────────────────────────
+    // Bind live references into the wrapper layer without altering boot above.
+    selfKernelSvcs.init(svcMgr);
+    selfKernelProcs.init(processModel);
+    selfKernelBoot.attachLoopEngine(kernel, svcMgr, router, loopCtrl);
+
+    // Inject live FS + AI references into loop nodes (optional enrichment)
+    try {
+      const aiNode = require('../usr/lib/aios/loop/nodes/ai.js');
+      aiNode.setAICore(aiCoreFinal);
+    } catch (_) {}
+    try {
+      const osNode = require('../usr/lib/aios/loop/nodes/os.js');
+      osNode.setFS(vfs);
+    } catch (_) {}
+
+    // ── LOOP + EXTENDED KERNEL SHELL COMMANDS ──────────────────────────────
+    router.registerCommand('loop', async (args) => {
+      const sub = (args[0] || 'status').toLowerCase();
+      switch (sub) {
+        case 'start':  return loopCtrl.start();
+        case 'stop':   return loopCtrl.stop();
+        case 'status': return loopCtrl.status();
+        case 'step':   return loopCtrl.step();
+        default:
+          return { status: 'error', result: 'Usage: loop <start|stop|status|step>' };
+      }
+    });
+
+    bootMsg('ok', 'Loop engine + self-kernel bridges attached\n');
 
     vfs.append('/var/log/boot.log', `[${ts()}] Terminal started\n`);
     terminal.start();
