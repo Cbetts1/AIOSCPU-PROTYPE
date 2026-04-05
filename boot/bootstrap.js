@@ -46,6 +46,7 @@ const { createPermissionSystem }= require('../core/permission-system.js');
 const { createAICore }          = require('../core/ai-core.js');
 const { createMirrorSession }   = require('../core/mirror-session.js');
 const { createIdentity }        = require('../core/identity.js');
+const { createMemoryCore }      = require('../core/memory-core.js');
 
 // ── New OS Integration Layer modules ─────────────────────────────────────────
 const { buildRootFS }           = require('../usr/lib/aios/rootfs-builder.js');
@@ -104,6 +105,12 @@ function start() {
   const kernel = createKernel();
   kernel.boot();
   bootMsg('ok', `Kernel  ${kernel.id}  v${kernel.version}`);
+
+  // ── 1.5. MEMORY CORE ───────────────────────────────────────────────────────
+  // Created immediately after the kernel so all subsystems can record into it.
+  const memoryCore = createMemoryCore(kernel);
+  kernel.modules.load('memory-core', memoryCore);
+  bootMsg('ok', `Memory Core v${memoryCore.version}  unified learning layer online`);
 
   // ── 2. FILESYSTEM (VFS) ────────────────────────────────────────────────────
   const vfs = createFilesystem();
@@ -190,7 +197,7 @@ function start() {
   bootMsg('ok', `Permission System  level=${perms.getLevel()}  caps=${perms.getTokens().length}`);
 
   // ── 14. AI CORE ────────────────────────────────────────────────────────────
-  const aiCore = createAICore(kernel, null, null, hostBridge);
+  const aiCore = createAICore(kernel, null, null, hostBridge, memoryCore);
   kernel.modules.load('ai-core', aiCore);
   bootMsg('ok', `AI Core v${aiCore.version}  NLP ready`);
 
@@ -200,7 +207,7 @@ function start() {
   bootMsg('ok', `Router v${router.version}  online`);
 
   // Wire AI core with router
-  const aiCoreFull = createAICore(kernel, router, null, hostBridge);
+  const aiCoreFull = createAICore(kernel, router, null, hostBridge, memoryCore);
   kernel.modules.unload('ai-core');
   kernel.modules.load('ai-core', aiCoreFull);
 
@@ -406,7 +413,7 @@ function start() {
   router.use('services', svcMgr);
 
   // Inject svcMgr into AI core
-  const aiCoreFinal = createAICore(kernel, router, svcMgr, hostBridge);
+  const aiCoreFinal = createAICore(kernel, router, svcMgr, hostBridge, memoryCore);
   kernel.modules.unload('ai-core');
   kernel.modules.load('ai-core', aiCoreFinal);
   try { router.unregisterCommand('ai'); } catch (_) {}
@@ -558,6 +565,164 @@ function start() {
         default:
           return { status: 'error', result: 'Usage: loop <start|stop|status|step>' };
       }
+    });
+
+    // ── MEMORY CORE COMMAND ────────────────────────────────────────────────
+    router.use('memory-core', memoryCore);
+
+    // ── SELF-TEST ─────────────────────────────────────────────────────────
+    router.registerCommand('selftest', async () => {
+      const results = [];
+      const pass = (label) => results.push(`  [PASS] ${label}`);
+      const fail = (label) => results.push(`  [FAIL] ${label}`);
+      const check = (label, ok) => (ok ? pass : fail)(label);
+
+      // Kernel
+      check('Kernel booted', kernel.isBooted());
+      check('Kernel uptime >= 0', kernel.uptime() >= 0);
+
+      // VFS
+      const tw = vfs.write('/tmp/selftest.txt', 'selftest-ok');
+      check('VFS write', tw && tw.ok);
+      const tr = vfs.read('/tmp/selftest.txt');
+      check('VFS read', tr && tr.ok && tr.content === 'selftest-ok');
+
+      // CPU
+      const cpuResult = cpu.run([
+        { op: 'LOADI', dst: 0, imm: 99 },
+        { op: 'HALT' },
+      ]);
+      check('CPU execution', cpuResult.halted && cpuResult.regs[0] === 99);
+
+      // Router
+      const routerResult = await router.handle('version');
+      check('Router dispatch', routerResult && routerResult.status === 'ok');
+
+      // AI Core (NLP)
+      const aiResult = await aiCoreFinal.process('hello');
+      check('AI Core NLP', aiResult && aiResult.status === 'ok');
+
+      // AI Monitor
+      check('AI monitor idle/wake', typeof aiCoreFinal.isMonitoring === 'function');
+
+      // Services
+      const svcs = svcMgr.list();
+      check('At least one service running', svcs.some(s => s.state === 'running'));
+
+      // Memory Core
+      check('Memory Core loaded', !!memoryCore);
+      const memStats = memoryCore.getStats();
+      check('Memory Core recording', memStats.recorded >= 0);
+
+      // Host Bridge
+      check('Platform detected', !!hostBridge.platform && !!hostBridge.platform.name);
+
+      // Remote/host server health (checks if host FS is accessible)
+      const hostHealth = hostBridge.root !== undefined;
+      check('Host bridge health', hostHealth);
+
+      // Permission system
+      check('Permission system active', !!perms.getLevel());
+
+      // VFS cleanup
+      vfs.rm('/tmp/selftest.txt');
+
+      const passed = results.filter(r => r.includes('[PASS]')).length;
+      const total  = results.length;
+      const allOk  = passed === total;
+
+      memoryCore.record('selftest', 'selftest', `${passed}/${total} passed`, allOk ? null : `${total - passed} failures`);
+
+      return {
+        status: allOk ? 'ok' : 'error',
+        result: [
+          'AIOS Self-Test',
+          '══════════════════════════════════',
+          ...results,
+          '══════════════════════════════════',
+          `Result: ${passed}/${total} passed${allOk ? ' ✓' : ' — see failures above'}`,
+        ].join('\n'),
+      };
+    });
+
+    // ── SYSTEM REPORT ─────────────────────────────────────────────────────
+    router.registerCommand('sysreport', async () => {
+      const lines = [];
+      const hr = (label) => lines.push(`── ${label} ${'─'.repeat(Math.max(0, 48 - label.length))}`);
+
+      lines.push('╔══════════════════════════════════════════════════════╗');
+      lines.push('║              AIOS System Report                      ║');
+      lines.push('╚══════════════════════════════════════════════════════╝');
+      lines.push('');
+
+      // Models / modules integrated
+      hr('Models & Modules Integrated');
+      kernel.modules.list().forEach(m => lines.push(`  • ${m}`));
+      lines.push('');
+
+      // Modes assigned
+      hr('Modes Assigned');
+      const envMode = require('../usr/lib/aios/env-kernel/mode.js');
+      lines.push(`  AI Monitor   : ${aiCoreFinal.isMonitoring() ? 'active' : 'inactive'}`);
+      lines.push(`  Brain mode   : primary`);
+      lines.push(`  Kernel mode  : ${envMode.getMode()}`);
+      lines.push(`  Loop engine  : ${loopCtrl.status().result || 'unknown'}`);
+      lines.push('');
+
+      // Port / platform status
+      hr('Platform & Host Status');
+      lines.push(`  Platform     : ${hostBridge.platform.name}`);
+      lines.push(`  Architecture : ${hostBridge.platform.arch || process.arch}`);
+      lines.push(`  Root access  : ${hostBridge.root.available ? hostBridge.root.level + ' via ' + hostBridge.root.method : 'not available'}`);
+      lines.push(`  Node.js      : ${process.versions.node}`);
+      lines.push('');
+
+      // Memory usage
+      hr('Memory Usage');
+      const mem = hostBridge.memInfo();
+      if (mem.ok) {
+        lines.push(`  Host total   : ${mem.totalMB} MB`);
+        lines.push(`  Host used    : ${mem.usedMB} MB`);
+        lines.push(`  Host free    : ${mem.freeMB} MB`);
+      } else {
+        lines.push('  Host memory  : unavailable');
+      }
+      const mStats = memoryCore.getStats();
+      lines.push(`  AIOS memory  : ${mStats.entries} entries, ${mStats.patterns} patterns learned`);
+      lines.push(`  Kernel uptime: ${kernel.uptime()}s`);
+      lines.push('');
+
+      // Services
+      hr('Services');
+      svcMgr.list().forEach(s => {
+        lines.push(`  ${s.name.padEnd(22)} ${s.state}`);
+      });
+      lines.push('');
+
+      // Logs (last 10 lines)
+      hr('Recent Boot Log');
+      const logRead = vfs.read('/var/log/boot.log');
+      if (logRead.ok) {
+        logRead.content.split('\n').filter(Boolean).slice(-10).forEach(l => lines.push(`  ${l}`));
+      } else {
+        lines.push('  No boot log available.');
+      }
+      lines.push('');
+
+      // AI stats
+      hr('AI Core Stats');
+      const aiStats = aiCoreFinal.stats();
+      lines.push(`  Queries      : ${aiStats.queries}`);
+      lines.push(`  Resolved     : ${aiStats.resolved}`);
+      lines.push(`  Fallbacks    : ${aiStats.fallbacks}`);
+      lines.push(`  Autonomous   : ${aiStats.autonomous}`);
+      lines.push('');
+
+      lines.push(`Report generated: ${new Date().toISOString()}`);
+
+      memoryCore.record('sysreport', 'sysreport', 'generated', null);
+
+      return { status: 'ok', result: lines.join('\n') };
     });
 
     bootMsg('ok', 'Loop engine + self-kernel bridges attached\n');

@@ -171,23 +171,29 @@ async function _queryLLM(prompt) {
 // ---------------------------------------------------------------------------
 // AI Core factory
 // ---------------------------------------------------------------------------
-function createAICore(kernel, router, svcMgr, hostBridge) {
+function createAICore(kernel, router, svcMgr, hostBridge, memoryCore) {
   const _decisionLog = [];
   let   _monitorActive = false;
   let   _monitorInterval = null;
   let   _stats = { queries: 0, resolved: 0, fallbacks: 0, autonomous: 0 };
 
   function _log(type, input, result, reasoning) {
+    const resultStr = typeof result === 'string' ? result.slice(0, 200) : String(result).slice(0, 200);
     const entry = {
       ts: new Date().toISOString(),
       type,
       input,
-      result: typeof result === 'string' ? result.slice(0, 200) : String(result).slice(0, 200),
+      result: resultStr,
       reasoning,
     };
     _decisionLog.push(entry);
     if (_decisionLog.length > 300) _decisionLog.shift();
     if (kernel) kernel.bus.emit('ai:decision', entry);
+    // Record into unified memory core so all model outputs are consolidated
+    if (memoryCore) {
+      const isError = type === 'fallback' || type === 'error';
+      memoryCore.record(type, input, resultStr, isError ? resultStr : null);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -365,6 +371,14 @@ function createAICore(kernel, router, svcMgr, hostBridge) {
         if (kernel) kernel.bus.emit('ai:alert', { type: 'memory:low', freeMB: m.freeMB });
       }
     }
+
+    // Proactive suggestions — emit current memory-core suggestions on the kernel bus
+    if (memoryCore && kernel) {
+      const suggs = memoryCore.suggestions();
+      if (suggs.length && !suggs[0].startsWith('No proactive')) {
+        kernel.bus.emit('ai:suggestions', { suggestions: suggs });
+      }
+    }
   }
 
   function startMonitor(intervalMs) {
@@ -431,6 +445,7 @@ function createAICore(kernel, router, svcMgr, hostBridge) {
     isMonitoring: () => _monitorActive,
     stats:        () => Object.assign({}, _stats),
     decisionLog:  () => _decisionLog.slice(),
+    memory:       memoryCore || null,
     commands,
   };
 }
