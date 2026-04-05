@@ -47,6 +47,14 @@ const { createAICore }          = require('../core/ai-core.js');
 const { createMirrorSession }   = require('../core/mirror-session.js');
 const { createIdentity }        = require('../core/identity.js');
 
+// ── Consciousness layer modules ───────────────────────────────────────────────
+const { createMemoryEngine }    = require('../core/memory-engine.js');
+const { createModeManager }     = require('../core/mode-manager.js');
+const { createModelRegistry }   = require('../core/model-registry.js');
+const { createDiagnosticsEngine}= require('../core/diagnostics-engine.js');
+const { createPortServer }      = require('../core/port-server.js');
+const { createConsciousness }   = require('../core/consciousness.js');
+
 // ── New OS Integration Layer modules ─────────────────────────────────────────
 const { buildRootFS }           = require('../usr/lib/aios/rootfs-builder.js');
 const { pivot }                 = require('./pivot.js');
@@ -464,7 +472,46 @@ function start() {
   router.use('boot-init', { commands: bootInit.coreInit.commands });
   router.use('service-runner', bootInit.svcRunner);
 
-  // ── 20. SYSCALLS ───────────────────────────────────────────────────────────
+  // ── 20. CONSCIOUSNESS LAYER ────────────────────────────────────────────────
+
+  // 20a. Memory Engine
+  const memoryEngine = createMemoryEngine(kernel, vfs);
+  memoryEngine.load();  // restore persisted state if any
+  kernel.modules.load('memory-engine', memoryEngine);
+  router.use('memory-engine', memoryEngine);
+  bootMsg('ok', `Memory Engine  v${memoryEngine.version}  online`);
+
+  // 20b. Mode Manager
+  const modeManager = createModeManager(kernel, memoryEngine);
+  kernel.modules.load('mode-manager', modeManager);
+  router.use('mode-manager', modeManager);
+  bootMsg('ok', `Mode Manager   v${modeManager.version}  default mode: ${modeManager.getMode()}`);
+
+  // 20c. Model Registry — discover available AI models
+  const modelRegistry = createModelRegistry(kernel, hostBridge, envLoader);
+  kernel.modules.load('model-registry', modelRegistry);
+  router.use('model-registry', modelRegistry);
+  bootMsg('info', 'Model Registry  discovering models…');
+
+  // 20d. Consciousness — central AI integration layer
+  const consciousness = createConsciousness(kernel, router, memoryEngine, modeManager, modelRegistry, aiCoreFinal);
+  kernel.modules.load('consciousness', consciousness);
+  router.use('consciousness', consciousness);
+  bootMsg('ok', `Consciousness  v${consciousness.version}  online`);
+
+  // 20e. Diagnostics Engine
+  const diagnosticsEngine = createDiagnosticsEngine(kernel, hostBridge, svcMgr, modelRegistry, null, vfs);
+  kernel.modules.load('diagnostics-engine', diagnosticsEngine);
+  router.use('diagnostics-engine', diagnosticsEngine);
+  bootMsg('ok', `Diagnostics    v${diagnosticsEngine.version}  online`);
+
+  // 20f. Port Server — single HTTP port, wired to consciousness + router
+  const portServer = createPortServer(kernel, router, consciousness, diagnosticsEngine);
+  kernel.modules.load('port-server', portServer);
+  router.use('port-server', portServer);
+  bootMsg('ok', `Port Server    v${portServer.version}  ready (use: port start)`);
+
+  // ── 21. SYSCALLS ───────────────────────────────────────────────────────────
   kernel.registerSyscall(2, (args) => { const r = vfs.read(String(args[0])); return r.ok ? r.content : null; });
   kernel.registerSyscall(3, (args) => { const r = vfs.write(String(args[0]), String(args[1] || '')); return r.ok ? r.bytes : -1; });
   kernel.registerSyscall(4, (args) => { const r = vfs.mkdir(String(args[0]), { parents: true }); return r.ok ? 0 : -1; });
@@ -477,15 +524,18 @@ function start() {
   });
   kernel.registerSyscall(12, (args) => {
     const query = String(args[0] || '');
-    aiCoreFinal.process(query).then(r => {
-      if (r && r.result) process.stdout.write('[AI] ' + r.result + '\n');
+    consciousness.query(query).then(r => {
+      if (r && r.result) process.stdout.write('[AIOS] ' + r.result + '\n');
     }).catch(() => {});
     return 0;
   });
 
-  // ── 21. SHUTDOWN HANDLER ───────────────────────────────────────────────────
+  // ── 22. SHUTDOWN HANDLER ───────────────────────────────────────────────────
   kernel.bus.on('kernel:shutdown', ({ uptime }) => {
     vfs.append('/var/log/boot.log', `[${ts()}] AIOS shutdown after ${uptime}s\n`);
+    memoryEngine.persist();
+    consciousness.stopProactive();
+    portServer.stop().catch(() => {});
     svcMgr.stopAll().catch(() => {});
     procfs.stop();
     scheduler.stop();
@@ -503,8 +553,8 @@ function start() {
     process.stderr.write(`[AIOS] Unhandled rejection: ${r}\n`);
   });
 
-  // ── 22. RUN INIT SEQUENCE ──────────────────────────────────────────────────
-  bootInit.boot().then(() => {
+  // ── 23. RUN INIT SEQUENCE ──────────────────────────────────────────────────
+  bootInit.boot().then(async () => {
     // Start services after init boot
     svcMgr.start('kernel-watchdog').catch(() => {});
     svcMgr.start('cpu-idle').catch(() => {});
@@ -514,7 +564,27 @@ function start() {
 
     scheduler.start();
 
-    // ── 23. TERMINAL ────────────────────────────────────────────────────────
+    // ── CONSCIOUSNESS WARM-UP ────────────────────────────────────────────────
+    // Discover models and start proactive assistance in the background.
+    modelRegistry.discover().then(({ discovered, total }) => {
+      bootMsg('ok', `Models  discovered=${discovered.length} total=${total}`);
+      vfs.append('/var/log/boot.log', `[${ts()}] Models: ${total} registered, ${discovered.length} newly found\n`);
+    }).catch(() => {});
+
+    consciousness.startProactive(60000);
+
+    // Auto-start port server on configured port
+    const aiosPort = parseInt((envLoader ? envLoader.get() : {})['AIOS_PORT'] || process.env.AIOS_PORT || '4000', 10);
+    portServer.start({ port: aiosPort }).then(r => {
+      if (r.ok) {
+        bootMsg('ok', `Port Server  listening on 127.0.0.1:${r.port}`);
+        vfs.append('/var/log/boot.log', `[${ts()}] Port server: 127.0.0.1:${r.port}\n`);
+      } else {
+        bootMsg('warn', `Port Server  failed to start: ${r.error}`);
+      }
+    }).catch(() => {});
+
+    // ── 24. TERMINAL ────────────────────────────────────────────────────────
     process.stdout.write('\n');
     bootMsg('ok', 'All systems online — AIOS is the platform — handing control to terminal\n');
 
