@@ -159,7 +159,7 @@ function _withTimeout(promise, ms) {
 // ---------------------------------------------------------------------------
 // createRemoteMesh factory
 // ---------------------------------------------------------------------------
-function createRemoteMesh(kernel, memoryCore) {
+function createRemoteMesh(kernel, memoryCore, collectiveIntelligence) {
   // Ollama base URL — override with OLLAMA_HOST to offload to a home server/PC
   const _ollamaUrl = (process.env.OLLAMA_HOST || 'http://127.0.0.1:11434').replace(/\/$/, '');
 
@@ -225,8 +225,16 @@ function createRemoteMesh(kernel, memoryCore) {
 
   // ── Single-agent query via Ollama /api/chat ────────────────────────────────
   async function _queryAgent(agent, prompt) {
+    // Inject collective intelligence context so this model benefits from
+    // everything all other models have previously learned about this topic
+    let systemPrompt = agent.systemPrompt;
+    if (collectiveIntelligence) {
+      const ctx = collectiveIntelligence.context(prompt);
+      if (ctx) systemPrompt = systemPrompt + '\n\n' + ctx;
+    }
+
     const messages = [
-      { role: 'system', content: agent.systemPrompt },
+      { role: 'system', content: systemPrompt },
       { role: 'user',   content: prompt },
     ];
     const res = await _withTimeout(
@@ -356,7 +364,14 @@ function createRemoteMesh(kernel, memoryCore) {
       throw new Error('All mesh agents failed. Check `ollama serve` and `mesh status`.');
     }
 
-    // ── 4. Record into memory-core so AIOS learns from this interaction ──────
+    // ── 4. Contribute to collective intelligence ─────────────────────────────
+    // Store this model's answer so ALL future queries — from any model or from
+    // AIOS/AURA — can draw on what was learned here.
+    if (collectiveIntelligence) {
+      collectiveIntelligence.contribute(usedAgent, prompt, result);
+    }
+
+    // ── 5. Record into memory-core so AIOS learns from this interaction ──────
     if (memoryCore) {
       memoryCore.record('mesh', prompt, result, null);
     }
@@ -374,6 +389,59 @@ function createRemoteMesh(kernel, memoryCore) {
   // and complex queries to remote (mesh) first — the mesh then routes internally.
   function registerWithAICore(aiCore) {
     aiCore.registerBackend('remote-mesh', { query }, { type: 'remote' });
+  }
+
+  // ── queryAll — fan out to ALL available agents, synthesize via collective ──
+  // Used by AIOS/AURA for deeply important questions where maximum intelligence
+  // is needed. All responses are stored in collective intelligence.
+  async function queryAll(prompt) {
+    await _ensureDiscovered();
+    if (_available.size === 0) return null;
+
+    const agents  = MESH_AGENTS.filter(a => _available.has(a.name) && !_isTripped(a.name));
+    if (!agents.length) return null;
+
+    const results = await Promise.allSettled(
+      agents.map(a => _queryAgent(a, prompt).then(text => ({ model: a.name, response: text }))),
+    );
+
+    const perspectives = results
+      .filter(r => r.status === 'fulfilled' && r.value)
+      .map(r => r.value);
+
+    // Update circuit breakers and contribute each perspective
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        _succeed(agents[i].name);
+        if (collectiveIntelligence) {
+          collectiveIntelligence.contribute(agents[i].name, prompt, r.value.response);
+        }
+      } else {
+        _fail(agents[i].name);
+      }
+    });
+
+    if (!perspectives.length) return null;
+
+    // Synthesize all perspectives into one combined answer
+    const combined = collectiveIntelligence
+      ? collectiveIntelligence.synthesize(perspectives)
+      : perspectives[0].response;
+
+    if (memoryCore) {
+      memoryCore.record('mesh:all', prompt, combined, null);
+    }
+
+    if (kernel) {
+      kernel.bus.emit('mesh:query-all', { count: perspectives.length, promptLen: prompt.length });
+    }
+
+    return combined;
+  }
+
+  // ── setCollectiveIntelligence — wire in after construction ────────────────
+  function setCollectiveIntelligence(ci) {
+    collectiveIntelligence = ci;
   }
 
   // ── Router commands ────────────────────────────────────────────────────────
@@ -487,8 +555,10 @@ function createRemoteMesh(kernel, memoryCore) {
     name:    'remote-mesh',
     version: VERSION,
     query,
+    queryAll,
     registerWithAICore,
     setMemoryCore,
+    setCollectiveIntelligence,
     status,
     commands,
   };

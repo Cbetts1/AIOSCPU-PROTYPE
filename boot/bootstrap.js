@@ -66,6 +66,7 @@ const { createPortServer }           = require('../core/port-server.js');
 const { createConsciousness }        = require('../core/consciousness.js');
 const { createAIOSAURA }             = require('../core/aios-aura.js');
 const { createRemoteMesh }           = require('../core/remote-mesh.js');
+const { createCollectiveIntelligence } = require('../core/collective-intelligence.js');
 const { createUpgradeManager }       = require('../core/upgrade-manager.js');
 
 // ── New OS Integration Layer modules ─────────────────────────────────────────
