@@ -673,7 +673,7 @@ function start() {
       hr('Platform & Host Status');
       lines.push(`  Platform     : ${hostBridge.platform.name}`);
       lines.push(`  Architecture : ${hostBridge.platform.arch || process.arch}`);
-      lines.push(`  Root access  : ${hostBridge.root.available ? hostBridge.root.level + ' via ' + hostBridge.root.method : 'not available'}`);
+      lines.push(`  Root access  : ${hostBridge.root && hostBridge.root.available ? hostBridge.root.level + ' via ' + hostBridge.root.method : 'not available'}`);
       lines.push(`  Node.js      : ${process.versions.node}`);
       lines.push('');
 

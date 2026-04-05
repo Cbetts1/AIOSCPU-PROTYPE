@@ -442,10 +442,10 @@ function createAICore(kernel, router, svcMgr, hostBridge, memoryCore) {
     setBackend,
     startMonitor,
     stopMonitor,
-    isMonitoring: () => _monitorActive,
-    stats:        () => Object.assign({}, _stats),
-    decisionLog:  () => _decisionLog.slice(),
-    memory:       memoryCore || null,
+    isMonitoring:  () => _monitorActive,
+    stats:         () => Object.assign({}, _stats),
+    decisionLog:   () => _decisionLog.slice(),
+    getMemoryStats: () => memoryCore ? memoryCore.getStats() : null,
     commands,
   };
 }
