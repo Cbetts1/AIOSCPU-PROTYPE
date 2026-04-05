@@ -1,9 +1,14 @@
 'use strict';
 /**
- * cpu.js — AIOSCPU v1.0 Virtual Processor
+ * cpu.js — AIOSCPU v1.1 Virtual Processor
  *
  * A software-emulated CPU that runs AIOSCPU bytecode inside AIOS Lite.
  * Integrated from: Cbetts1/Digtail-Web-CPU (ISA design reference)
+ *
+ * v1.1 additions:
+ *   - Memory bounds checking (throws E_CPU_BOUNDS on out-of-range access)
+ *   - CPU self-test routine (selfTest())
+ *   - Additional arithmetic ops: NEG, ABS, INC, DEC
  *
  * ISA Summary (32-bit word-addressed, object-encoded instructions):
  *   Registers : R0–R7 (general purpose), PC, SP, FLAGS
@@ -41,6 +46,10 @@ const OP = Object.freeze({
   MUL:     0x13,   // R[dst] = R[src1] * R[src2]
   DIV:     0x14,   // R[dst] = R[src1] / R[src2]  (integer)
   MOD:     0x15,   // R[dst] = R[src1] % R[src2]
+  NEG:     0x16,   // R[dst] = -R[src]
+  ABS:     0x17,   // R[dst] = |R[src]|
+  INC:     0x18,   // R[dst] = R[dst] + 1
+  DEC:     0x19,   // R[dst] = R[dst] - 1
   // Bitwise
   AND:     0x20,
   OR:      0x21,
@@ -83,7 +92,7 @@ const FLAG_OF = 1 << 3;  // Overflow
 // AIOSCPU factory
 // ---------------------------------------------------------------------------
 function createCPU(kernel) {
-  const CPU_VERSION = '1.0.0';
+  const CPU_VERSION = '1.1.0';
   const MEM_SIZE    = 65536;      // 64 KB
   const NUM_REGS    = 8;
   const STACK_BASE  = 0x01FF;
@@ -103,11 +112,21 @@ function createCPU(kernel) {
   // Memory helpers (byte-level store for data; program is object array)
   // ---------------------------------------------------------------------------
   function memRead(addr) {
-    if (addr < 0 || addr >= MEM_SIZE) return 0;
+    if (addr < 0 || addr >= MEM_SIZE) {
+      const err = new RangeError(`AIOSCPU: Memory read out of bounds: 0x${addr.toString(16)} (size=0x${MEM_SIZE.toString(16)})`);
+      err.cpuCode = 'E_CPU_BOUNDS';
+      if (kernel && kernel.bus) kernel.bus.emit('cpu:fault', { type: 'bounds', op: 'read', addr });
+      throw err;
+    }
     return mem[addr];
   }
   function memWrite(addr, value) {
-    if (addr < 0 || addr >= MEM_SIZE) return;
+    if (addr < 0 || addr >= MEM_SIZE) {
+      const err = new RangeError(`AIOSCPU: Memory write out of bounds: 0x${addr.toString(16)} (size=0x${MEM_SIZE.toString(16)})`);
+      err.cpuCode = 'E_CPU_BOUNDS';
+      if (kernel && kernel.bus) kernel.bus.emit('cpu:fault', { type: 'bounds', op: 'write', addr });
+      throw err;
+    }
     mem[addr] = value & 0xFF;
   }
 
@@ -244,6 +263,30 @@ function createCPU(kernel) {
         regs[instr.dst] = regs[instr.src1] % b;
         break;
       }
+      case 'NEG': {
+        const r = (-regs[instr.src]) | 0;
+        regs[instr.dst] = r;
+        setFlags(r, regs[instr.src], 0, 'SUB');
+        break;
+      }
+      case 'ABS': {
+        const v = regs[instr.src];
+        regs[instr.dst] = (v < 0 ? -v : v) | 0;
+        FLAGS = regs[instr.dst] === 0 ? FLAG_ZF : 0;
+        break;
+      }
+      case 'INC': {
+        const r = (regs[instr.dst] + 1) | 0;
+        regs[instr.dst] = r;
+        setFlags(r, r - 1, 1, 'ADD');
+        break;
+      }
+      case 'DEC': {
+        const r = (regs[instr.dst] - 1) | 0;
+        regs[instr.dst] = r;
+        setFlags(r, r + 1, 1, 'SUB');
+        break;
+      }
       case 'AND':
         regs[instr.dst] = regs[instr.src1] & regs[instr.src2];
         break;
@@ -345,6 +388,139 @@ function createCPU(kernel) {
   }
 
   // ---------------------------------------------------------------------------
+  // CPU self-test — runs on boot, verifies core instructions work correctly
+  // ---------------------------------------------------------------------------
+  function selfTest() {
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function check(label, actual, expected) {
+      const ok = actual === expected;
+      results.push({ label, ok, actual, expected });
+      if (ok) passed++; else failed++;
+    }
+
+    // Save and restore CPU state around the self-test
+    const savedRegs    = Array.from(regs);
+    const savedPC      = PC;
+    const savedSP      = SP;
+    const savedFlags   = FLAGS;
+    const savedHalted  = _halted;
+    const savedRunning = _running;
+    const savedCycles  = _cycles;
+    const savedProgram = _program.slice();
+
+    try {
+      // Test 1: LOADI + ADD
+      const t1 = run([
+        { op: 'LOADI', dst: 0, imm: 10 },
+        { op: 'LOADI', dst: 1, imm: 32 },
+        { op: 'ADD',   dst: 2, src1: 0, src2: 1 },
+        { op: 'HALT' },
+      ]);
+      check('LOADI+ADD: R2=42', t1.regs[2], 42);
+
+      // Test 2: SUB
+      const t2 = run([
+        { op: 'LOADI', dst: 0, imm: 100 },
+        { op: 'LOADI', dst: 1, imm: 58  },
+        { op: 'SUB',   dst: 2, src1: 0, src2: 1 },
+        { op: 'HALT' },
+      ]);
+      check('SUB: R2=42', t2.regs[2], 42);
+
+      // Test 3: MUL
+      const t3 = run([
+        { op: 'LOADI', dst: 0, imm: 6  },
+        { op: 'LOADI', dst: 1, imm: 7  },
+        { op: 'MUL',   dst: 2, src1: 0, src2: 1 },
+        { op: 'HALT' },
+      ]);
+      check('MUL: R2=42', t3.regs[2], 42);
+
+      // Test 4: DIV
+      const t4 = run([
+        { op: 'LOADI', dst: 0, imm: 126 },
+        { op: 'LOADI', dst: 1, imm: 3   },
+        { op: 'DIV',   dst: 2, src1: 0, src2: 1 },
+        { op: 'HALT' },
+      ]);
+      check('DIV: R2=42', t4.regs[2], 42);
+
+      // Test 5: NEG
+      const t5 = run([
+        { op: 'LOADI', dst: 0, imm: -42 },
+        { op: 'NEG',   dst: 1, src: 0   },
+        { op: 'HALT' },
+      ]);
+      check('NEG: R1=42', t5.regs[1], 42);
+
+      // Test 6: ABS
+      const t6 = run([
+        { op: 'LOADI', dst: 0, imm: -42 },
+        { op: 'ABS',   dst: 1, src: 0   },
+        { op: 'HALT' },
+      ]);
+      check('ABS: R1=42', t6.regs[1], 42);
+
+      // Test 7: INC
+      const t7 = run([
+        { op: 'LOADI', dst: 0, imm: 41 },
+        { op: 'INC',   dst: 0           },
+        { op: 'HALT' },
+      ]);
+      check('INC: R0=42', t7.regs[0], 42);
+
+      // Test 8: DEC
+      const t8 = run([
+        { op: 'LOADI', dst: 0, imm: 43 },
+        { op: 'DEC',   dst: 0           },
+        { op: 'HALT' },
+      ]);
+      check('DEC: R0=42', t8.regs[0], 42);
+
+      // Test 9: JZ branch
+      const t9 = run([
+        { op: 'LOADI', dst: 0, imm: 0  },
+        { op: 'CMPI',  src: 0, imm: 0  },
+        { op: 'JZ',    addr: 4          },
+        { op: 'LOADI', dst: 1, imm: 99 },  // should be skipped
+        { op: 'LOADI', dst: 1, imm: 42 },
+        { op: 'HALT' },
+      ]);
+      check('JZ: R1=42', t9.regs[1], 42);
+
+      // Test 10: CALL / RET
+      const t10 = run([
+        { op: 'CALL',  addr: 2          },  // call sub at index 2
+        { op: 'HALT'                    },
+        { op: 'LOADI', dst: 0, imm: 42  },  // sub body
+        { op: 'RET'                     },
+      ]);
+      check('CALL+RET: R0=42', t10.regs[0], 42);
+
+    } finally {
+      // Restore CPU state
+      regs.fill(0);
+      for (let i = 0; i < savedRegs.length; i++) regs[i] = savedRegs[i];
+      PC       = savedPC;
+      SP       = savedSP;
+      FLAGS    = savedFlags;
+      _halted  = savedHalted;
+      _running = savedRunning;
+      _cycles  = savedCycles;
+      _program = savedProgram;
+    }
+
+    const allPassed = failed === 0;
+    if (kernel && kernel.bus) {
+      kernel.bus.emit('cpu:selftest', { passed, failed, allPassed, results });
+    }
+    return { passed, failed, allPassed, results };
+  }
+
+  // ---------------------------------------------------------------------------
   // CPU Module interface (for kernel module registry)
   // ---------------------------------------------------------------------------
   const cpuModule = {
@@ -355,6 +531,7 @@ function createCPU(kernel) {
     loadProgram,
     step,
     run,
+    selfTest,
 
     // Register accessors
     getRegs:  () => Array.from(regs),
