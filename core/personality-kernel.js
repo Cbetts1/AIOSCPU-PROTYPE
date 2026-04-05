@@ -125,7 +125,7 @@ function createBackupBrain() {
 // ---------------------------------------------------------------------------
 // Personality Kernel factory
 // ---------------------------------------------------------------------------
-function createPersonalityKernel(kernel, primaryAICore, router, svcMgr, hwKernel, stateEngine) {
+function createPersonalityKernel(kernel, primaryAICore, router, svcMgr, hwKernel, stateEngine, memoryCore) {
   const FAILOVER_THRESHOLD = 3;    // primary failures before auto-switch
   const FAILOVER_WINDOW_MS = 60000; // rolling 60-second window
 
@@ -157,6 +157,9 @@ function createPersonalityKernel(kernel, primaryAICore, router, svcMgr, hwKernel
       kernel.bus.emit('brain:failover', { to: 'backup', reason });
       kernel.syscall(1, [`[PersonalityKernel] Switched to backup brain — ${reason}`]);
     }
+    if (memoryCore) {
+      memoryCore.record('brain', `failover:${reason}`, 'switched to backup', reason);
+    }
   }
 
   function _switchToPrimary() {
@@ -166,6 +169,9 @@ function createPersonalityKernel(kernel, primaryAICore, router, svcMgr, hwKernel
     if (kernel) {
       kernel.bus.emit('brain:recovered', { to: 'primary' });
       kernel.syscall(1, ['[PersonalityKernel] Primary brain restored.']);
+    }
+    if (memoryCore) {
+      memoryCore.record('brain', 'recovered:primary', 'switched to primary', null);
     }
   }
 

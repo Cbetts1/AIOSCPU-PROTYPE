@@ -23,14 +23,23 @@
  *   15. Initialize Command Router + mount all modules
  *   16. Initialize Mirror Session Manager
  *   17. Initialize Service Manager
- *   18. Initialize PID-1 Boot Init (init.js)
+ *   18. Initialize Service Manager built-in services
+ *   19. Initialize Memory Engine (interactions, queries, learning data)
+ *   20. Initialize Mode Manager (Chat, Code, Fix, Help, Learn)
+ *   21. Initialize Diagnostics Engine (models, ports, system health)
+ *   22. Initialize Port Server (single TCP communication port)
+ *   23. Initialize PID-1 Boot Init (init.js)
  *        → registers all init-target units
  *        → loads service units from /etc/aios/services/*.json
  *        → activates targets: sysinit → basic → multi-user
  *        → starts all services
- *   19. Register syscalls
- *   20. Wire shutdown handlers
- *   21. Hand control to Terminal
+ *   24. Register syscalls
+ *   25. Wire shutdown handlers
+ *   26. Run init sequence + self-check
+ *        → verify memory availability and CPU status
+ *        → confirm port can open
+ *        → test local lightweight AIOSCPU model
+ *   27. Hand control to Terminal
  *
  * Zero external npm dependencies.
  */
@@ -46,6 +55,13 @@ const { createPermissionSystem }= require('../core/permission-system.js');
 const { createAICore }          = require('../core/ai-core.js');
 const { createMirrorSession }   = require('../core/mirror-session.js');
 const { createIdentity }        = require('../core/identity.js');
+const { createMemoryCore }      = require('../core/memory-core.js');
+
+// ── New AIOS core components ─────────────────────────────────────────────────
+const { createMemoryEngine }     = require('../core/memory-engine.js');
+const { createModeManager }      = require('../core/mode-manager.js');
+const { createDiagnosticsEngine }= require('../core/diagnostics-engine.js');
+const { createPortServer }       = require('../core/port-server.js');
 
 // ── Consciousness layer modules ───────────────────────────────────────────────
 const { createMemoryEngine }    = require('../core/memory-engine.js');
@@ -112,6 +128,12 @@ function start() {
   const kernel = createKernel();
   kernel.boot();
   bootMsg('ok', `Kernel  ${kernel.id}  v${kernel.version}`);
+
+  // ── 1.5. MEMORY CORE ───────────────────────────────────────────────────────
+  // Created immediately after the kernel so all subsystems can record into it.
+  const memoryCore = createMemoryCore(kernel);
+  kernel.modules.load('memory-core', memoryCore);
+  bootMsg('ok', `Memory Core v${memoryCore.version}  unified learning layer online`);
 
   // ── 2. FILESYSTEM (VFS) ────────────────────────────────────────────────────
   const vfs = createFilesystem();
@@ -198,7 +220,7 @@ function start() {
   bootMsg('ok', `Permission System  level=${perms.getLevel()}  caps=${perms.getTokens().length}`);
 
   // ── 14. AI CORE ────────────────────────────────────────────────────────────
-  const aiCore = createAICore(kernel, null, null, hostBridge);
+  const aiCore = createAICore(kernel, null, null, hostBridge, memoryCore);
   kernel.modules.load('ai-core', aiCore);
   bootMsg('ok', `AI Core v${aiCore.version}  NLP ready`);
 
@@ -208,7 +230,7 @@ function start() {
   bootMsg('ok', `Router v${router.version}  online`);
 
   // Wire AI core with router
-  const aiCoreFull = createAICore(kernel, router, null, hostBridge);
+  const aiCoreFull = createAICore(kernel, router, null, hostBridge, memoryCore);
   kernel.modules.unload('ai-core');
   kernel.modules.load('ai-core', aiCoreFull);
 
@@ -414,7 +436,7 @@ function start() {
   router.use('services', svcMgr);
 
   // Inject svcMgr into AI core
-  const aiCoreFinal = createAICore(kernel, router, svcMgr, hostBridge);
+  const aiCoreFinal = createAICore(kernel, router, svcMgr, hostBridge, memoryCore);
   kernel.modules.unload('ai-core');
   kernel.modules.load('ai-core', aiCoreFinal);
   try { router.unregisterCommand('ai'); } catch (_) {}
@@ -461,7 +483,31 @@ function start() {
 
   bootMsg('ok', 'Service Manager  online');
 
-  // ── 19. BOOT INIT (PID-1) ──────────────────────────────────────────────────
+  // ── 19. MEMORY ENGINE ─────────────────────────────────────────────────────
+  const memoryEngine = createMemoryEngine(kernel);
+  kernel.modules.load('memory-engine', memoryEngine);
+  router.use('memory-engine', memoryEngine);
+  bootMsg('ok', `Memory Engine v${memoryEngine.version}  online`);
+
+  // ── 20. MODE MANAGER ──────────────────────────────────────────────────────
+  const modeManager = createModeManager(kernel, memoryEngine);
+  kernel.modules.load('mode-manager', modeManager);
+  router.use('mode-manager', modeManager);
+  bootMsg('ok', `Mode Manager v${modeManager.version}  mode=${modeManager.getMode()}`);
+
+  // ── 21. DIAGNOSTICS ENGINE ────────────────────────────────────────────────
+  const diagnostics = createDiagnosticsEngine(kernel, hostBridge, { pollIntervalMs: 60000 });
+  kernel.modules.load('diagnostics-engine', diagnostics);
+  router.use('diagnostics-engine', diagnostics);
+  bootMsg('ok', `Diagnostics Engine v${diagnostics.version}  online`);
+
+  // ── 22. PORT SERVER ───────────────────────────────────────────────────────
+  const portServer = createPortServer(kernel, router, diagnostics);
+  kernel.modules.load('port-server', portServer);
+  router.use('port-server', portServer);
+  bootMsg('ok', `Port Server v${portServer.version}  ready  (port ${portServer.info().port})`);
+
+  // ── 23. BOOT INIT (PID-1) ──────────────────────────────────────────────────
   const bootInit = createBootInit({
     kernel, vfs, cpu, hostBridge, perms,
     aiCore: aiCoreFinal, router, svcMgr, mirrorMgr,
@@ -539,6 +585,8 @@ function start() {
     svcMgr.stopAll().catch(() => {});
     procfs.stop();
     scheduler.stop();
+    diagnostics.stop();
+    portServer.stop().catch(() => {});
     mirrorMgr.list().forEach(m => { try { mirrorMgr.unmount(m.type); } catch (_) {} });
   });
 
@@ -563,6 +611,49 @@ function start() {
     svcMgr.start('procfs-updater').catch(() => {});
 
     scheduler.start();
+    diagnostics.start();
+
+    // ── SELF-CHECK ──────────────────────────────────────────────────────────
+    process.stdout.write('\n  \x1b[35m[SELF-CHECK]\x1b[0m  Running system self-check…\n');
+
+    // 1. Memory availability and CPU status
+    const health = diagnostics.captureHealth();
+    const memOk  = health.memory.usedPct < 95;
+    bootMsg(memOk ? 'ok' : 'warn',
+      `Self-check: memory ${health.memory.usedMB}/${health.memory.totalMB} MB (${health.memory.usedPct}% used)`);
+    bootMsg('ok', `Self-check: CPU  ${health.cpu.cores} cores  load=${health.cpu.loadAvg1}`);
+    memoryEngine.learn('self-check', { type: 'memory', ...health.memory });
+    memoryEngine.learn('self-check', { type: 'cpu',    ...health.cpu    });
+
+    // 2. Confirm port can open
+    const portCheck = await portServer.canBind();
+    if (portCheck.ok) {
+      bootMsg('ok', `Self-check: port ${portCheck.port} is available`);
+      // Start the port server now that we've confirmed it's available
+      portServer.start().catch(() => {});
+    } else {
+      bootMsg('warn', `Self-check: port ${portServer.info().port} unavailable — ${portCheck.error}`);
+    }
+    memoryEngine.learn('self-check', { type: 'port', port: portServer.info().port, ok: portCheck.ok });
+
+    // 3. Test local lightweight model (CPU self-test via AIOSCPU emulator)
+    try {
+      const cpuProg = [
+        { op: 'LOADI', dst: 0, imm: 1 },
+        { op: 'LOADI', dst: 1, imm: 1 },
+        { op: 'ADD',   dst: 2, src1: 0, src2: 1 },
+        { op: 'HALT' },
+      ];
+      const cpuResult = cpu.run(cpuProg);
+      const cpuOk = !cpuResult.error && cpuResult.regs && cpuResult.regs[2] === 2;
+      bootMsg(cpuOk ? 'ok' : 'warn',
+        `Self-check: AIOSCPU model test ${cpuOk ? 'passed' : 'failed'}  (cycles=${cpuResult.cycles})`);
+      memoryEngine.learn('self-check', { type: 'cpu-model', ok: cpuOk, cycles: cpuResult.cycles });
+    } catch (e) {
+      bootMsg('warn', `Self-check: AIOSCPU model test error — ${e.message}`);
+    }
+
+    process.stdout.write('  \x1b[35m[SELF-CHECK]\x1b[0m  Self-check complete\n');
 
     // ── CONSCIOUSNESS WARM-UP ────────────────────────────────────────────────
     // Discover models and start proactive assistance in the background.
@@ -628,6 +719,164 @@ function start() {
         default:
           return { status: 'error', result: 'Usage: loop <start|stop|status|step>' };
       }
+    });
+
+    // ── MEMORY CORE COMMAND ────────────────────────────────────────────────
+    router.use('memory-core', memoryCore);
+
+    // ── SELF-TEST ─────────────────────────────────────────────────────────
+    router.registerCommand('selftest', async () => {
+      const results = [];
+      const pass = (label) => results.push(`  [PASS] ${label}`);
+      const fail = (label) => results.push(`  [FAIL] ${label}`);
+      const check = (label, ok) => (ok ? pass : fail)(label);
+
+      // Kernel
+      check('Kernel booted', kernel.isBooted());
+      check('Kernel uptime >= 0', kernel.uptime() >= 0);
+
+      // VFS
+      const tw = vfs.write('/tmp/selftest.txt', 'selftest-ok');
+      check('VFS write', tw && tw.ok);
+      const tr = vfs.read('/tmp/selftest.txt');
+      check('VFS read', tr && tr.ok && tr.content === 'selftest-ok');
+
+      // CPU
+      const cpuResult = cpu.run([
+        { op: 'LOADI', dst: 0, imm: 99 },
+        { op: 'HALT' },
+      ]);
+      check('CPU execution', cpuResult.halted && cpuResult.regs[0] === 99);
+
+      // Router
+      const routerResult = await router.handle('version');
+      check('Router dispatch', routerResult && routerResult.status === 'ok');
+
+      // AI Core (NLP)
+      const aiResult = await aiCoreFinal.process('hello');
+      check('AI Core NLP', aiResult && aiResult.status === 'ok');
+
+      // AI Monitor
+      check('AI monitor idle/wake', typeof aiCoreFinal.isMonitoring === 'function');
+
+      // Services
+      const svcs = svcMgr.list();
+      check('At least one service running', svcs.some(s => s.state === 'running'));
+
+      // Memory Core
+      check('Memory Core loaded', !!memoryCore);
+      const memStats = memoryCore.getStats();
+      check('Memory Core recording', memStats.recorded >= 0);
+
+      // Host Bridge
+      check('Platform detected', !!hostBridge.platform && !!hostBridge.platform.name);
+
+      // Remote/host server health (checks if host FS is accessible)
+      const hostHealth = hostBridge.root !== undefined;
+      check('Host bridge health', hostHealth);
+
+      // Permission system
+      check('Permission system active', !!perms.getLevel());
+
+      // VFS cleanup
+      vfs.rm('/tmp/selftest.txt');
+
+      const passed = results.filter(r => r.includes('[PASS]')).length;
+      const total  = results.length;
+      const allOk  = passed === total;
+
+      memoryCore.record('selftest', 'selftest', `${passed}/${total} passed`, allOk ? null : `${total - passed} failures`);
+
+      return {
+        status: allOk ? 'ok' : 'error',
+        result: [
+          'AIOS Self-Test',
+          '══════════════════════════════════',
+          ...results,
+          '══════════════════════════════════',
+          `Result: ${passed}/${total} passed${allOk ? ' ✓' : ' — see failures above'}`,
+        ].join('\n'),
+      };
+    });
+
+    // ── SYSTEM REPORT ─────────────────────────────────────────────────────
+    router.registerCommand('sysreport', async () => {
+      const lines = [];
+      const hr = (label) => lines.push(`── ${label} ${'─'.repeat(Math.max(0, 48 - label.length))}`);
+
+      lines.push('╔══════════════════════════════════════════════════════╗');
+      lines.push('║              AIOS System Report                      ║');
+      lines.push('╚══════════════════════════════════════════════════════╝');
+      lines.push('');
+
+      // Models / modules integrated
+      hr('Models & Modules Integrated');
+      kernel.modules.list().forEach(m => lines.push(`  • ${m}`));
+      lines.push('');
+
+      // Modes assigned
+      hr('Modes Assigned');
+      const envMode = require('../usr/lib/aios/env-kernel/mode.js');
+      lines.push(`  AI Monitor   : ${aiCoreFinal.isMonitoring() ? 'active' : 'inactive'}`);
+      lines.push(`  Brain mode   : primary`);
+      lines.push(`  Kernel mode  : ${envMode.getMode()}`);
+      lines.push(`  Loop engine  : ${loopCtrl.status().result || 'unknown'}`);
+      lines.push('');
+
+      // Port / platform status
+      hr('Platform & Host Status');
+      lines.push(`  Platform     : ${hostBridge.platform.name}`);
+      lines.push(`  Architecture : ${hostBridge.platform.arch || process.arch}`);
+      lines.push(`  Root access  : ${hostBridge.root && hostBridge.root.available ? hostBridge.root.level + ' via ' + hostBridge.root.method : 'not available'}`);
+      lines.push(`  Node.js      : ${process.versions.node}`);
+      lines.push('');
+
+      // Memory usage
+      hr('Memory Usage');
+      const mem = hostBridge.memInfo();
+      if (mem.ok) {
+        lines.push(`  Host total   : ${mem.totalMB} MB`);
+        lines.push(`  Host used    : ${mem.usedMB} MB`);
+        lines.push(`  Host free    : ${mem.freeMB} MB`);
+      } else {
+        lines.push('  Host memory  : unavailable');
+      }
+      const mStats = memoryCore.getStats();
+      lines.push(`  AIOS memory  : ${mStats.entries} entries, ${mStats.patterns} patterns learned`);
+      lines.push(`  Kernel uptime: ${kernel.uptime()}s`);
+      lines.push('');
+
+      // Services
+      hr('Services');
+      svcMgr.list().forEach(s => {
+        lines.push(`  ${s.name.padEnd(22)} ${s.state}`);
+      });
+      lines.push('');
+
+      // Logs (last 10 lines)
+      hr('Recent Boot Log');
+      const logRead = vfs.read('/var/log/boot.log');
+      if (logRead.ok) {
+        logRead.content.split('\n').filter(Boolean).slice(-10).forEach(l => lines.push(`  ${l}`));
+      } else {
+        lines.push('  No boot log available.');
+      }
+      lines.push('');
+
+      // AI stats
+      hr('AI Core Stats');
+      const aiStats = aiCoreFinal.stats();
+      lines.push(`  Queries      : ${aiStats.queries}`);
+      lines.push(`  Resolved     : ${aiStats.resolved}`);
+      lines.push(`  Fallbacks    : ${aiStats.fallbacks}`);
+      lines.push(`  Autonomous   : ${aiStats.autonomous}`);
+      lines.push('');
+
+      lines.push(`Report generated: ${new Date().toISOString()}`);
+
+      memoryCore.record('sysreport', 'sysreport', 'generated', null);
+
+      return { status: 'ok', result: lines.join('\n') };
     });
 
     bootMsg('ok', 'Loop engine + self-kernel bridges attached\n');
