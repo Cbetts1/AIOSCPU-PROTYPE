@@ -33,7 +33,8 @@ function pathResolve(logicalPath) {
   if (mode.isMirrorHost()) {
     // /home/... → /host-home/...
     if (p === '/home' || p.startsWith('/home/')) {
-      return nodepath.join('/host-home', p.slice('/home'.length) || '/');
+      const suffix = p.slice('/home'.length);
+      return nodepath.join('/host-home', suffix || '/');
     }
     // everything else → /host/...
     return nodepath.join('/host', p);

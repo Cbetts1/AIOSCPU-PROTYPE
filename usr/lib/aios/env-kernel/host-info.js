@@ -35,16 +35,15 @@ function _detectPlatform() {
         return 'termux';
       }
       // Check for Android without Termux
-      if (
-        nodefs.existsSync('/system/build.prop') ||
-        nodefs.existsSync('/proc/1/cgroup') && (() => {
-          try {
-            return nodefs.readFileSync('/proc/1/cgroup', 'utf8').includes('android');
-          } catch (_) { return false; }
-        })()
-      ) {
-        return 'android';
+      let isAndroid = false;
+      if (nodefs.existsSync('/system/build.prop')) {
+        isAndroid = true;
+      } else if (nodefs.existsSync('/proc/1/cgroup')) {
+        try {
+          isAndroid = nodefs.readFileSync('/proc/1/cgroup', 'utf8').includes('android');
+        } catch (_) {}
       }
+      if (isAndroid) return 'android';
     } catch (_) {}
     return 'linux';
   }

@@ -370,7 +370,7 @@ function start() {
         ? { status: 'ok',    result: `Host mode switched to "${r.mode}".` }
         : { status: 'error', result: r.error };
     }
-    return { status: 'ok', result: 'Usage: kernel <info|syscall <num> [args...]|mode|switch <self|mirror>>' };
+    return { status: 'ok', result: 'Usage: kernel <info | syscall <num> [args...] | mode | switch <self|mirror>>' };
   });
 
   // Host Bridge commands
