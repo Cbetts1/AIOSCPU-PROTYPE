@@ -1,7 +1,7 @@
 'use strict';
 
-const { createKernel } = require('../core/kernel');
 const { createModeManager, MODES } = require('../core/mode-manager');
+const { createKernel }             = require('../core/kernel');
 
 describe('ModeManager', () => {
   let kernel;
@@ -19,66 +19,36 @@ describe('ModeManager', () => {
 
   describe('createModeManager', () => {
     test('returns object with expected API', () => {
+      expect(mgr).toBeDefined();
       expect(mgr.name).toBe('mode-manager');
       expect(mgr.version).toBe('1.0.0');
-      expect(typeof mgr.getMode).toBe('function');
-      expect(typeof mgr.getModeInfo).toBe('function');
-      expect(typeof mgr.listModes).toBe('function');
       expect(typeof mgr.setMode).toBe('function');
-      expect(typeof mgr.getHistory).toBe('function');
-      expect(typeof mgr.commands).toBe('object');
-      expect(typeof mgr.commands.mode).toBe('function');
+      expect(typeof mgr.getMode).toBe('function');
+      expect(typeof mgr.getModeConfig).toBe('function');
+      expect(typeof mgr.listModes).toBe('function');
+      expect(typeof mgr.getSystemPrompt).toBe('function');
+      expect(typeof mgr.getModeHistory).toBe('function');
+      expect(mgr.commands).toBeDefined();
     });
 
     test('default mode is chat', () => {
       expect(mgr.getMode()).toBe('chat');
     });
-
-    test('accepts custom default mode', () => {
-      const m = createModeManager(kernel, null, { defaultMode: 'code' });
-      expect(m.getMode()).toBe('code');
-    });
-
-    test('invalid default mode falls back to chat', () => {
-      const m = createModeManager(kernel, null, { defaultMode: 'invalid' });
-      expect(m.getMode()).toBe('chat');
-    });
   });
 
   describe('MODES constant', () => {
-    test('contains all five modes', () => {
-      const keys = Object.keys(MODES);
-      expect(keys).toContain('chat');
-      expect(keys).toContain('code');
-      expect(keys).toContain('fix');
-      expect(keys).toContain('help');
-      expect(keys).toContain('learn');
+    test('has all five modes', () => {
+      expect(Object.keys(MODES)).toEqual(expect.arrayContaining(['chat', 'code', 'fix', 'help', 'learn']));
     });
 
-    test('is frozen', () => {
-      expect(Object.isFrozen(MODES)).toBe(true);
-    });
-  });
-
-  describe('getModeInfo', () => {
-    test('returns info for current mode', () => {
-      const info = mgr.getModeInfo();
-      expect(info.name).toBe('chat');
-      expect(typeof info.label).toBe('string');
-      expect(typeof info.description).toBe('string');
-    });
-  });
-
-  describe('listModes', () => {
-    test('returns array of five modes', () => {
-      const list = mgr.listModes();
-      expect(Array.isArray(list)).toBe(true);
-      expect(list.length).toBe(5);
-      list.forEach(m => {
-        expect(m).toHaveProperty('name');
-        expect(m).toHaveProperty('label');
-        expect(m).toHaveProperty('description');
-      });
+    test('each mode has required fields', () => {
+      for (const m of Object.values(MODES)) {
+        expect(typeof m.name).toBe('string');
+        expect(typeof m.description).toBe('string');
+        expect(typeof m.systemPrompt).toBe('string');
+        expect(typeof m.responseStyle).toBe('string');
+        expect(Array.isArray(m.capabilities)).toBe(true);
+      }
     });
   });
 
@@ -91,9 +61,9 @@ describe('ModeManager', () => {
     });
 
     test('returns error for unknown mode', () => {
-      const r = mgr.setMode('invalid');
+      const r = mgr.setMode('invalid-mode');
       expect(r.ok).toBe(false);
-      expect(r.error).toMatch(/unknown mode/i);
+      expect(r.error).toBeDefined();
     });
 
     test('mode names are case-insensitive', () => {
@@ -102,88 +72,101 @@ describe('ModeManager', () => {
       expect(mgr.getMode()).toBe('code');
     });
 
-    test('switches to all five modes', () => {
-      for (const mode of ['chat', 'code', 'fix', 'help', 'learn']) {
-        const r = mgr.setMode(mode);
-        expect(r.ok).toBe(true);
-        expect(mgr.getMode()).toBe(mode);
+    test('emits mode:changed event', () => {
+      const handler = jest.fn();
+      kernel.bus.on('mode:changed', handler);
+      mgr.setMode('fix');
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ from: 'chat', to: 'fix' }));
+    });
+
+    test('records mode transition history', () => {
+      mgr.setMode('code');
+      mgr.setMode('fix');
+      const hist = mgr.getModeHistory(5);
+      expect(hist).toHaveLength(2);
+      expect(hist[0].to).toBe('code');
+      expect(hist[1].to).toBe('fix');
+    });
+  });
+
+  describe('getModeConfig', () => {
+    test('returns config for current mode by default', () => {
+      mgr.setMode('learn');
+      const cfg = mgr.getModeConfig();
+      expect(cfg.name).toBe('learn');
+    });
+
+    test('returns config for named mode', () => {
+      const cfg = mgr.getModeConfig('code');
+      expect(cfg.name).toBe('code');
+    });
+
+    test('falls back to default for unknown mode name', () => {
+      const cfg = mgr.getModeConfig('unknown');
+      expect(cfg).toBeDefined();
+    });
+  });
+
+  describe('listModes', () => {
+    test('returns array of all modes', () => {
+      const list = mgr.listModes();
+      expect(Array.isArray(list)).toBe(true);
+      expect(list).toHaveLength(5);
+      expect(list.map(m => m.name)).toEqual(expect.arrayContaining(['chat', 'code', 'fix', 'help', 'learn']));
+    });
+  });
+
+  describe('getSystemPrompt', () => {
+    test('returns non-empty string for each mode', () => {
+      for (const name of ['chat', 'code', 'fix', 'help', 'learn']) {
+        const p = mgr.getSystemPrompt(name);
+        expect(typeof p).toBe('string');
+        expect(p.length).toBeGreaterThan(0);
       }
     });
-
-    test('emits mode:changed kernel event', () => {
-      const events = [];
-      kernel.bus.on('mode:changed', (data) => events.push(data));
-      mgr.setMode('code');
-      expect(events.length).toBe(1);
-      expect(events[0].from).toBe('chat');
-      expect(events[0].to).toBe('code');
-    });
   });
 
-  describe('getHistory', () => {
-    test('records mode switches', () => {
-      mgr.setMode('code');
-      mgr.setMode('fix');
-      const hist = mgr.getHistory(10);
-      expect(hist.length).toBe(2);
-      expect(hist[0].to).toBe('fix');
-      expect(hist[1].to).toBe('code');
-    });
-
-    test('respects limit', () => {
-      mgr.setMode('code');
-      mgr.setMode('fix');
-      mgr.setMode('help');
-      const hist = mgr.getHistory(2);
-      expect(hist.length).toBe(2);
-    });
-  });
-
-  describe('commands interface', () => {
-    test('mode status returns current mode', () => {
+  describe('commands', () => {
+    test('mode command with no args shows current mode', () => {
       const r = mgr.commands.mode([]);
       expect(r.status).toBe('ok');
-      expect(r.result).toContain('Chat');
+      expect(r.result).toContain('CHAT');
     });
 
     test('mode list shows all modes', () => {
       const r = mgr.commands.mode(['list']);
       expect(r.status).toBe('ok');
-      expect(r.result).toContain('Chat');
-      expect(r.result).toContain('Code');
-      expect(r.result).toContain('Fix');
-      expect(r.result).toContain('Help');
-      expect(r.result).toContain('Learn');
+      expect(r.result).toContain('chat');
+      expect(r.result).toContain('code');
+      expect(r.result).toContain('fix');
+      expect(r.result).toContain('help');
+      expect(r.result).toContain('learn');
+      expect(r.result).toContain('active');
     });
 
     test('mode <name> switches mode', () => {
       const r = mgr.commands.mode(['code']);
       expect(r.status).toBe('ok');
+      expect(r.result).toContain('CODE');
       expect(mgr.getMode()).toBe('code');
     });
 
     test('mode <invalid> returns error', () => {
-      const r = mgr.commands.mode(['nonsense']);
+      const r = mgr.commands.mode(['bogus']);
       expect(r.status).toBe('error');
     });
 
-    test('mode history shows switch log', () => {
+    test('mode history shows transitions', () => {
       mgr.setMode('code');
       const r = mgr.commands.mode(['history']);
       expect(r.status).toBe('ok');
       expect(r.result).toContain('code');
     });
-  });
 
-  describe('with memory engine integration', () => {
-    test('records mode switch as learning', () => {
-      const { createMemoryEngine } = require('../core/memory-engine');
-      const mem = createMemoryEngine(kernel);
-      const m   = createModeManager(kernel, mem);
-      m.setMode('code');
-      const learnings = mem.getLearnings(5, 'mode-switch');
-      expect(learnings.length).toBe(1);
-      expect(learnings[0].data.to).toBe('code');
+    test('mode history empty', () => {
+      const r = mgr.commands.mode(['history']);
+      expect(r.status).toBe('ok');
+      expect(r.result).toContain('No mode transitions');
     });
   });
 });

@@ -2,243 +2,276 @@
 /**
  * memory-engine.js — AIOS Memory Engine v1.0.0
  *
- * Persistent in-session store for all interactions, queries, and learning data.
+ * Centralised, persistent memory for AIOS consciousness.
  *
- * Responsibilities:
- *   - Record every user interaction (input + response + timestamp)
- *   - Record raw queries for replay and inspection
- *   - Accumulate learning observations for mode-specific knowledge
- *   - Provide lookup, export, and capacity-reporting APIs
+ * Features:
+ *   - Key/value context store (Map-backed)
+ *   - Interaction history (bounded ring-buffer)
+ *   - Learned-fact store with source and confidence
+ *   - VFS persistence: reads/writes /var/lib/aios/memory.json
+ *   - Per-session and cross-session context
+ *   - `memory` terminal command
  *
  * Zero external npm dependencies.
  */
 
-const MEMORY_ENGINE_VERSION = '1.0.0';
-const DEFAULT_MAX_INTERACTIONS = 10000;
-const DEFAULT_MAX_QUERIES      = 5000;
-const DEFAULT_MAX_LEARNINGS    = 2000;
+const MAX_HISTORY = 1000;
+const MAX_FACTS   = 500;
 
 // ---------------------------------------------------------------------------
-// createMemoryEngine
+// Memory Engine factory
 // ---------------------------------------------------------------------------
-/**
- * @param {object} kernel  - AIOS kernel instance
- * @param {object} [opts]
- * @param {number} [opts.maxInteractions] - max interaction records (default 10000)
- * @param {number} [opts.maxQueries]      - max query records      (default 5000)
- * @param {number} [opts.maxLearnings]    - max learning records   (default 2000)
- */
-function createMemoryEngine(kernel, opts = {}) {
-  const maxInteractions = opts.maxInteractions || DEFAULT_MAX_INTERACTIONS;
-  const maxQueries      = opts.maxQueries      || DEFAULT_MAX_QUERIES;
-  const maxLearnings    = opts.maxLearnings    || DEFAULT_MAX_LEARNINGS;
+function createMemoryEngine(kernel, vfs) {
+  const _store   = new Map();       // key → value (arbitrary context)
+  const _history = [];              // interaction log
+  const _facts   = [];              // learned facts
 
-  // ── Internal stores ───────────────────────────────────────────────────────
-  const _interactions = [];   // { id, ts, mode, input, response, meta }
-  const _queries      = [];   // { id, ts, raw, parsed, source }
-  const _learnings    = [];   // { id, ts, topic, data, confidence }
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
-  let _idSeq = 0;
-  function _nextId() { return ++_idSeq; }
+  function _ts() { return new Date().toISOString(); }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  function _now() { return new Date().toISOString(); }
-
-  function _trim(store, max) {
-    if (store.length > max) store.splice(0, store.length - max);
-  }
-
-  // ── Public API ─────────────────────────────────────────────────────────────
+  // ── store / retrieve ─────────────────────────────────────────────────────
 
   /**
-   * Record a completed interaction.
-   * @param {string} mode      - current mode (chat, code, fix, help, learn)
-   * @param {string} input     - user input text
-   * @param {string} response  - system response text
-   * @param {object} [meta]    - optional extra metadata
-   * @returns {{ id: number }}
+   * Store a key/value pair in the context store.
+   * @param {string} key
+   * @param {*} value
    */
-  function recordInteraction(mode, input, response, meta = {}) {
+  function store(key, value) {
+    if (typeof key !== 'string' || !key) throw new TypeError('key must be a non-empty string');
+    _store.set(key, { value, ts: _ts() });
+    if (kernel) kernel.bus.emit('memory:stored', { key });
+  }
+
+  /**
+   * Retrieve a value from the context store.
+   * @param {string} key
+   * @returns {*} value or undefined
+   */
+  function retrieve(key) {
+    const entry = _store.get(key);
+    return entry ? entry.value : undefined;
+  }
+
+  /**
+   * Remove a key from the context store.
+   * @param {string} key
+   */
+  function forget(key) {
+    _store.delete(key);
+    if (kernel) kernel.bus.emit('memory:forgotten', { key });
+  }
+
+  /** List all stored context keys. */
+  function listKeys() { return Array.from(_store.keys()); }
+
+  // ── Interaction history ───────────────────────────────────────────────────
+
+  /**
+   * Append an interaction to the history.
+   * @param {{ role: string, content: string, mode?: string, model?: string }} entry
+   */
+  function append(entry) {
+    if (!entry || typeof entry.content !== 'string') return;
     const record = {
-      id:       _nextId(),
-      ts:       _now(),
-      mode:     String(mode || 'unknown'),
-      input:    String(input  || ''),
-      response: String(response || ''),
-      meta,
+      ts:      _ts(),
+      role:    entry.role    || 'user',
+      content: entry.content,
+      mode:    entry.mode    || 'chat',
+      model:   entry.model   || 'built-in',
     };
-    _interactions.push(record);
-    _trim(_interactions, maxInteractions);
-    if (kernel && kernel.bus) {
-      kernel.bus.emit('memory:interaction', { id: record.id, mode: record.mode });
-    }
-    return { id: record.id };
+    _history.push(record);
+    if (_history.length > MAX_HISTORY) _history.shift();
+    if (kernel) kernel.bus.emit('memory:appended', { role: record.role });
   }
 
   /**
-   * Record a raw query.
-   * @param {string} raw     - raw query string
-   * @param {object} parsed  - parsed representation
-   * @param {string} source  - origin (e.g. 'terminal', 'port', 'ai')
-   * @returns {{ id: number }}
+   * Return the N most recent history entries (default 20).
+   * @param {number} [n]
+   * @returns {object[]}
    */
-  function recordQuery(raw, parsed, source) {
+  function getHistory(n) {
+    const count = (typeof n === 'number' && n > 0) ? n : 20;
+    return _history.slice(-count);
+  }
+
+  /** Clear all history. */
+  function clearHistory() { _history.length = 0; }
+
+  // ── Learning ──────────────────────────────────────────────────────────────
+
+  /**
+   * Learn a new fact.
+   * @param {{ content: string, source?: string, confidence?: number }} fact
+   */
+  function learn(fact) {
+    if (!fact || typeof fact.content !== 'string' || !fact.content) return;
     const record = {
-      id:     _nextId(),
-      ts:     _now(),
-      raw:    String(raw || ''),
-      parsed: parsed || null,
-      source: String(source || 'unknown'),
+      ts:         _ts(),
+      content:    fact.content,
+      source:     fact.source     || 'interaction',
+      confidence: (typeof fact.confidence === 'number') ? fact.confidence : 1.0,
     };
-    _queries.push(record);
-    _trim(_queries, maxQueries);
-    return { id: record.id };
+    _facts.push(record);
+    if (_facts.length > MAX_FACTS) _facts.shift();
+    if (kernel) kernel.bus.emit('memory:learned', { content: record.content.slice(0, 80) });
   }
 
+  /** Return all learned facts. */
+  function getFacts() { return _facts.slice(); }
+
+  // ── Persistence (VFS) ────────────────────────────────────────────────────
+
   /**
-   * Add a learning observation.
-   * @param {string} topic       - subject area
-   * @param {*}      data        - learning payload
-   * @param {number} [confidence=1.0] - 0–1 confidence score
-   * @returns {{ id: number }}
+   * Persist current memory state to VFS at /var/lib/aios/memory.json.
    */
-  function learn(topic, data, confidence = 1.0) {
-    const record = {
-      id:         _nextId(),
-      ts:         _now(),
-      topic:      String(topic || 'general'),
-      data,
-      confidence: Math.min(1, Math.max(0, Number(confidence) || 1.0)),
+  function persist() {
+    if (!vfs) return;
+    const snapshot = {
+      ts:      _ts(),
+      store:   Object.fromEntries(
+        Array.from(_store.entries()).map(([k, v]) => [k, v])
+      ),
+      history: _history.slice(-200),
+      facts:   _facts.slice(-200),
     };
-    _learnings.push(record);
-    _trim(_learnings, maxLearnings);
-    if (kernel && kernel.bus) {
-      kernel.bus.emit('memory:learn', { id: record.id, topic: record.topic });
-    }
-    return { id: record.id };
+    try {
+      vfs.mkdir('/var/lib/aios', { parents: true });
+      vfs.write('/var/lib/aios/memory.json', JSON.stringify(snapshot, null, 2) + '\n');
+    } catch (_) {}
   }
 
   /**
-   * Retrieve interaction history (most recent first).
-   * @param {number} [limit=50]
-   * @param {string} [mode]    - optional mode filter
+   * Load persisted memory state from VFS.
    */
-  function getInteractions(limit = 50, mode) {
-    let list = _interactions.slice();
-    if (mode) list = list.filter(r => r.mode === mode);
-    return list.slice(-limit).reverse();
+  function load() {
+    if (!vfs) return;
+    try {
+      const r = vfs.read('/var/lib/aios/memory.json');
+      if (!r || !r.ok) return;
+      const snapshot = JSON.parse(r.content);
+      if (snapshot.store) {
+        for (const [k, v] of Object.entries(snapshot.store)) {
+          _store.set(k, v);
+        }
+      }
+      if (Array.isArray(snapshot.history)) {
+        snapshot.history.forEach(e => _history.push(e));
+        while (_history.length > MAX_HISTORY) _history.shift();
+      }
+      if (Array.isArray(snapshot.facts)) {
+        snapshot.facts.forEach(f => _facts.push(f));
+        while (_facts.length > MAX_FACTS) _facts.shift();
+      }
+    } catch (_) {}
   }
 
-  /**
-   * Retrieve query history (most recent first).
-   * @param {number} [limit=50]
-   */
-  function getQueries(limit = 50) {
-    return _queries.slice(-limit).reverse();
-  }
+  // ── Summary ───────────────────────────────────────────────────────────────
 
-  /**
-   * Retrieve learning observations.
-   * @param {number} [limit=50]
-   * @param {string} [topic] - optional topic filter
-   */
-  function getLearnings(limit = 50, topic) {
-    let list = _learnings.slice();
-    if (topic) list = list.filter(r => r.topic === topic);
-    return list.slice(-limit).reverse();
-  }
-
-  /** Capacity and usage statistics */
-  function stats() {
+  function summary() {
     return {
-      interactions: { count: _interactions.length, max: maxInteractions },
-      queries:      { count: _queries.length,      max: maxQueries      },
-      learnings:    { count: _learnings.length,    max: maxLearnings    },
-      totalRecords: _interactions.length + _queries.length + _learnings.length,
+      contextKeys:      _store.size,
+      historyEntries:   _history.length,
+      learnedFacts:     _facts.length,
+      oldestInteraction: _history.length ? _history[0].ts : null,
+      newestInteraction: _history.length ? _history[_history.length - 1].ts : null,
     };
-  }
-
-  /** Clear all stored data */
-  function clear() {
-    _interactions.splice(0);
-    _queries.splice(0);
-    _learnings.splice(0);
-    _idSeq = 0;
   }
 
   // ── Router command interface ───────────────────────────────────────────────
+
   const commands = {
-    'memory stats':   () => {
-      const s = stats();
+    memory(args) {
+      const sub = (args[0] || 'summary').toLowerCase();
+
+      if (sub === 'summary') {
+        const s = summary();
+        return {
+          status: 'ok',
+          result: [
+            'Memory Engine v1.0.0',
+            `Context keys    : ${s.contextKeys}`,
+            `History entries : ${s.historyEntries}`,
+            `Learned facts   : ${s.learnedFacts}`,
+            `Oldest entry    : ${s.oldestInteraction || 'none'}`,
+            `Newest entry    : ${s.newestInteraction || 'none'}`,
+          ].join('\n'),
+        };
+      }
+
+      if (sub === 'history') {
+        const n = parseInt(args[1], 10) || 20;
+        const entries = getHistory(n);
+        if (!entries.length) return { status: 'ok', result: 'No history yet.' };
+        const lines = entries.map(e =>
+          `[${e.ts.slice(11, 19)}] ${e.role.padEnd(8)} (${e.mode}/${e.model}): ${e.content.slice(0, 80)}`
+        );
+        return { status: 'ok', result: lines.join('\n') };
+      }
+
+      if (sub === 'facts') {
+        if (!_facts.length) return { status: 'ok', result: 'No facts learned yet.' };
+        const lines = _facts.slice(-20).map(f =>
+          `[${f.ts.slice(0, 10)}] [${String(f.confidence.toFixed(1))}] ${f.content.slice(0, 100)}`
+        );
+        return { status: 'ok', result: lines.join('\n') };
+      }
+
+      if (sub === 'store' && args[1] && args[2]) {
+        store(args[1], args.slice(2).join(' '));
+        return { status: 'ok', result: `Stored "${args[1]}".` };
+      }
+
+      if (sub === 'get' && args[1]) {
+        const v = retrieve(args[1]);
+        return v !== undefined
+          ? { status: 'ok',    result: `${args[1]} = ${JSON.stringify(v)}` }
+          : { status: 'error', result: `Key "${args[1]}" not found.` };
+      }
+
+      if (sub === 'forget' && args[1]) {
+        forget(args[1]);
+        return { status: 'ok', result: `Forgotten "${args[1]}".` };
+      }
+
+      if (sub === 'keys') {
+        const keys = listKeys();
+        return { status: 'ok', result: keys.length ? keys.join(', ') : '(empty)' };
+      }
+
+      if (sub === 'persist') {
+        persist();
+        return { status: 'ok', result: 'Memory persisted to VFS.' };
+      }
+
+      if (sub === 'clear') {
+        clearHistory();
+        return { status: 'ok', result: 'History cleared.' };
+      }
+
       return {
         status: 'ok',
-        result: [
-          `Memory Engine v${MEMORY_ENGINE_VERSION}`,
-          `  Interactions : ${s.interactions.count} / ${s.interactions.max}`,
-          `  Queries      : ${s.queries.count} / ${s.queries.max}`,
-          `  Learnings    : ${s.learnings.count} / ${s.learnings.max}`,
-          `  Total records: ${s.totalRecords}`,
-        ].join('\n'),
+        result: 'Usage: memory <summary|history [n]|facts|store <key> <val>|get <key>|forget <key>|keys|persist|clear>',
       };
-    },
-    'memory history': (args) => {
-      const limit = parseInt(args[0], 10) || 10;
-      const list  = getInteractions(limit);
-      if (!list.length) return { status: 'ok', result: 'No interactions recorded yet.' };
-      const lines = list.map(r =>
-        `[${r.ts.slice(11, 19)}] [${r.mode}] ${r.input.slice(0, 60)}`
-      );
-      return { status: 'ok', result: lines.join('\n') };
-    },
-    'memory queries': (args) => {
-      const limit = parseInt(args[0], 10) || 10;
-      const list  = getQueries(limit);
-      if (!list.length) return { status: 'ok', result: 'No queries recorded yet.' };
-      const lines = list.map(r =>
-        `[${r.ts.slice(11, 19)}] [${r.source}] ${r.raw.slice(0, 80)}`
-      );
-      return { status: 'ok', result: lines.join('\n') };
-    },
-    'memory learn': (args) => {
-      const limit = parseInt(args[0], 10) || 10;
-      const list  = getLearnings(limit);
-      if (!list.length) return { status: 'ok', result: 'No learning data yet.' };
-      const lines = list.map(r =>
-        `[${r.ts.slice(11, 19)}] [${r.topic}] conf=${r.confidence.toFixed(2)}`
-      );
-      return { status: 'ok', result: lines.join('\n') };
-    },
-    'memory clear': () => {
-      clear();
-      return { status: 'ok', result: 'Memory cleared.' };
     },
   };
 
-  function dispatch(args) {
-    const sub = (args[0] || 'stats').toLowerCase();
-    const key = `memory ${sub}`;
-    const fn  = commands[key];
-    if (fn) return fn(args.slice(1));
-    return {
-      status: 'ok',
-      result: 'Usage: memory <stats|history [n]|queries [n]|learn [n]|clear>',
-    };
-  }
-
   return {
-    name:    'memory-engine',
-    version: MEMORY_ENGINE_VERSION,
-    // Core API
-    recordInteraction,
-    recordQuery,
+    name:         'memory-engine',
+    version:      '1.0.0',
+    store,
+    retrieve,
+    forget,
+    listKeys,
+    append,
+    getHistory,
+    clearHistory,
     learn,
-    getInteractions,
-    getQueries,
-    getLearnings,
-    stats,
-    clear,
-    // Router integration
-    commands: { memory: dispatch },
+    getFacts,
+    persist,
+    load,
+    summary,
+    commands,
   };
 }
 

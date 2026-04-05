@@ -2,143 +2,188 @@
 /**
  * mode-manager.js — AIOS Mode Manager v1.0.0
  *
- * Manages the active operating mode for the AIOS session.
+ * Manages AIOS operating modes for the consciousness layer.
  *
- * Supported modes:
- *   chat  — general conversational AI interaction
- *   code  — coding assistance, generation, and review
- *   fix   — debugging, error diagnosis, and patching
- *   help  — documentation, command hints, and how-to guidance
- *   learn — active learning and knowledge capture
+ * Modes:
+ *   chat  — Natural conversation; general-purpose assistant
+ *   code  — Code generation, review, and explanation
+ *   fix   — Debug, diagnose, and repair issues
+ *   help  — System guidance and documentation
+ *   learn — Active learning; memorise and recall facts
+ *
+ * Each mode carries a system prompt, response style, and capability flags
+ * that the consciousness layer uses when routing to AI models.
  *
  * Zero external npm dependencies.
  */
 
-const MODE_MANAGER_VERSION = '1.0.0';
+// ---------------------------------------------------------------------------
+// Mode definitions
+// ---------------------------------------------------------------------------
+const MODES = {
+  chat: {
+    name:          'chat',
+    description:   'Natural conversation mode — general-purpose AI assistant',
+    systemPrompt:  'You are AIOS, a friendly and helpful AI operating system assistant. Respond naturally and conversationally. Keep answers concise.',
+    responseStyle: 'conversational',
+    emoji:         '💬',
+    capabilities:  ['nlp', 'reasoning', 'context'],
+  },
+  code: {
+    name:          'code',
+    description:   'Code generation, review, and explanation mode',
+    systemPrompt:  'You are AIOS in code mode. Generate clean, well-commented code. When reviewing code, point out issues and improvements. Prefer correct over clever.',
+    responseStyle: 'technical',
+    emoji:         '💻',
+    capabilities:  ['nlp', 'code-gen', 'code-review', 'syntax-check'],
+  },
+  fix: {
+    name:          'fix',
+    description:   'Debug, diagnose, and fix issues mode',
+    systemPrompt:  'You are AIOS in fix mode. Diagnose problems systematically. Explain the root cause, then provide a concrete fix. Always verify the fix addresses the root cause.',
+    responseStyle: 'diagnostic',
+    emoji:         '🔧',
+    capabilities:  ['nlp', 'diagnostics', 'error-analysis', 'repair'],
+  },
+  help: {
+    name:          'help',
+    description:   'System help, guidance, and documentation mode',
+    systemPrompt:  'You are AIOS in help mode. Provide clear, structured guidance. Use numbered steps for procedures. Reference relevant commands and examples.',
+    responseStyle: 'instructive',
+    emoji:         '📖',
+    capabilities:  ['nlp', 'documentation', 'guidance'],
+  },
+  learn: {
+    name:          'learn',
+    description:   'Active learning and fact memorisation mode',
+    systemPrompt:  'You are AIOS in learn mode. When given information, summarise the key facts and confirm what you have stored. When asked to recall, retrieve accurately.',
+    responseStyle: 'educational',
+    emoji:         '🧠',
+    capabilities:  ['nlp', 'memory', 'fact-extraction', 'recall'],
+  },
+};
 
-const MODES = Object.freeze({
-  chat:  { name: 'chat',  label: 'Chat',  description: 'General conversational AI interaction' },
-  code:  { name: 'code',  label: 'Code',  description: 'Coding assistance, generation, and review' },
-  fix:   { name: 'fix',   label: 'Fix',   description: 'Debugging, error diagnosis, and patching' },
-  help:  { name: 'help',  label: 'Help',  description: 'Documentation, command hints, and how-to guidance' },
-  learn: { name: 'learn', label: 'Learn', description: 'Active learning and knowledge capture' },
-});
-
+const MODE_NAMES = Object.keys(MODES);
 const DEFAULT_MODE = 'chat';
 
 // ---------------------------------------------------------------------------
-// createModeManager
+// Mode Manager factory
 // ---------------------------------------------------------------------------
-/**
- * @param {object} kernel         - AIOS kernel instance
- * @param {object} [memoryEngine] - optional memory engine (records mode switches)
- * @param {object} [opts]
- * @param {string} [opts.defaultMode] - starting mode (default: 'chat')
- */
-function createModeManager(kernel, memoryEngine, opts = {}) {
-  const startMode = (opts.defaultMode && MODES[opts.defaultMode])
-    ? opts.defaultMode
-    : DEFAULT_MODE;
+function createModeManager(kernel, memoryEngine) {
+  let _currentMode = DEFAULT_MODE;
+  const _modeHistory = []; // track mode transitions
 
-  let _currentMode = startMode;
-  const _history   = [];   // { ts, from, to }
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  function _now() { return new Date().toISOString(); }
+  function _ts() { return new Date().toISOString(); }
 
-  function _record(from, to) {
-    _history.push({ ts: _now(), from, to });
-    if (_history.length > 500) _history.splice(0, _history.length - 500);
-  }
-
-  // ── Public API ─────────────────────────────────────────────────────────────
-
-  /** Get the current mode name */
-  function getMode() { return _currentMode; }
-
-  /** Get full mode descriptor for the current mode */
-  function getModeInfo() { return Object.assign({}, MODES[_currentMode]); }
-
-  /** List all available modes */
-  function listModes() {
-    return Object.values(MODES).map(m => Object.assign({}, m));
-  }
+  // ── Core API ──────────────────────────────────────────────────────────────
 
   /**
-   * Switch to a new mode.
-   * @param {string} modeName
+   * Switch to a named mode.
+   * @param {string} mode
    * @returns {{ ok: boolean, mode?: string, error?: string }}
    */
-  function setMode(modeName) {
-    const key = String(modeName || '').toLowerCase().trim();
-    if (!MODES[key]) {
-      return { ok: false, error: `Unknown mode "${key}". Valid: ${Object.keys(MODES).join(', ')}` };
+  function setMode(mode) {
+    const name = (mode || '').toLowerCase().trim();
+    if (!MODES[name]) {
+      return { ok: false, error: `Unknown mode "${name}". Available: ${MODE_NAMES.join(', ')}` };
     }
     const prev = _currentMode;
-    _currentMode = key;
-    _record(prev, key);
+    _currentMode = name;
+    const entry = { from: prev, to: name, ts: _ts() };
+    _modeHistory.push(entry);
+    if (_modeHistory.length > 100) _modeHistory.shift();
 
-    if (kernel && kernel.bus) {
-      kernel.bus.emit('mode:changed', { from: prev, to: key });
-    }
-    if (memoryEngine) {
-      memoryEngine.learn('mode-switch', { from: prev, to: key }, 1.0);
-    }
-    return { ok: true, mode: key };
+    if (kernel) kernel.bus.emit('mode:changed', entry);
+    if (memoryEngine) memoryEngine.store('aios.mode', name);
+
+    return { ok: true, mode: name };
   }
 
-  /** Mode-switch history (most recent first) */
-  function getHistory(limit = 20) {
-    return _history.slice(-limit).reverse();
+  /** Return the current mode name. */
+  function getMode() { return _currentMode; }
+
+  /** Return the full config for the current mode. */
+  function getModeConfig(modeName) {
+    return MODES[(modeName || _currentMode).toLowerCase()] || MODES[DEFAULT_MODE];
+  }
+
+  /** Return all mode configs as an array. */
+  function listModes() { return Object.values(MODES); }
+
+  /** Return the system prompt for the current (or specified) mode. */
+  function getSystemPrompt(modeName) {
+    return getModeConfig(modeName).systemPrompt;
+  }
+
+  /** Return recent mode transitions. */
+  function getModeHistory(n) {
+    const count = (typeof n === 'number' && n > 0) ? n : 10;
+    return _modeHistory.slice(-count);
   }
 
   // ── Router command interface ───────────────────────────────────────────────
-  function dispatch(args) {
-    const sub = (args[0] || '').toLowerCase().trim();
 
-    if (!sub || sub === 'status') {
-      const info = getModeInfo();
-      return {
-        status: 'ok',
-        result: `Mode Manager v${MODE_MANAGER_VERSION}\n  Current mode : ${info.label}\n  Description  : ${info.description}`,
-      };
-    }
+  const commands = {
+    mode(args) {
+      const sub = (args[0] || '').toLowerCase().trim();
 
-    if (sub === 'list') {
-      const lines = listModes().map(m =>
-        `  ${m.name === _currentMode ? '▶' : ' '} ${m.label.padEnd(6)}  — ${m.description}`
-      );
-      return { status: 'ok', result: ['Available modes:', ...lines].join('\n') };
-    }
+      // No argument — show current mode
+      if (!sub) {
+        const cfg = getModeConfig();
+        return {
+          status: 'ok',
+          result: [
+            `Current mode : ${cfg.emoji}  ${cfg.name.toUpperCase()}`,
+            `Description  : ${cfg.description}`,
+            `Style        : ${cfg.responseStyle}`,
+            `Capabilities : ${cfg.capabilities.join(', ')}`,
+            '',
+            `Available modes: ${MODE_NAMES.join(', ')}`,
+            `Switch with  : mode <name>`,
+          ].join('\n'),
+        };
+      }
 
-    if (sub === 'history') {
-      const hist = getHistory(parseInt(args[1], 10) || 10);
-      if (!hist.length) return { status: 'ok', result: 'No mode switches recorded.' };
-      const lines = hist.map(h => `[${h.ts.slice(11, 19)}] ${h.from} → ${h.to}`);
-      return { status: 'ok', result: lines.join('\n') };
-    }
+      // `mode list` — list all modes
+      if (sub === 'list') {
+        const lines = Object.values(MODES).map(m => {
+          const active = m.name === _currentMode ? ' ◀ active' : '';
+          return `  ${m.emoji}  ${m.name.padEnd(6)} — ${m.description}${active}`;
+        });
+        return { status: 'ok', result: ['AIOS Operating Modes:', ...lines].join('\n') };
+      }
 
-    // Attempt to switch mode
-    const r = setMode(sub);
-    if (r.ok) {
-      const info = MODES[r.mode];
-      return { status: 'ok', result: `Mode switched to "${info.label}" — ${info.description}` };
-    }
-    return { status: 'error', result: r.error };
-  }
+      // `mode history` — recent transitions
+      if (sub === 'history') {
+        const hist = getModeHistory(10);
+        if (!hist.length) return { status: 'ok', result: 'No mode transitions yet.' };
+        const lines = hist.map(e => `[${e.ts.slice(11, 19)}] ${e.from} → ${e.to}`);
+        return { status: 'ok', result: lines.join('\n') };
+      }
+
+      // `mode <name>` — switch mode
+      const r = setMode(sub);
+      if (r.ok) {
+        const cfg = MODES[r.mode];
+        return { status: 'ok', result: `Mode switched to ${cfg.emoji}  ${cfg.name.toUpperCase()} — ${cfg.description}` };
+      }
+      return { status: 'error', result: r.error };
+    },
+  };
 
   return {
-    name:    'mode-manager',
-    version: MODE_MANAGER_VERSION,
-    MODES,
-    // Core API
-    getMode,
-    getModeInfo,
-    listModes,
+    name:           'mode-manager',
+    version:        '1.0.0',
     setMode,
-    getHistory,
-    // Router integration
-    commands: { mode: dispatch },
+    getMode,
+    getModeConfig,
+    listModes,
+    getSystemPrompt,
+    getModeHistory,
+    commands,
+    MODES,
   };
 }
 

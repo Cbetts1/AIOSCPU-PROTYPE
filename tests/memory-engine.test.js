@@ -1,16 +1,16 @@
 'use strict';
 
-const { createKernel } = require('../core/kernel');
 const { createMemoryEngine } = require('../core/memory-engine');
+const { createKernel }       = require('../core/kernel');
 
 describe('MemoryEngine', () => {
   let kernel;
-  let mem;
+  let memory;
 
   beforeEach(() => {
     kernel = createKernel();
     kernel.boot();
-    mem = createMemoryEngine(kernel);
+    memory = createMemoryEngine(kernel, null);  // no VFS in unit tests
   });
 
   afterEach(() => {
@@ -18,168 +18,237 @@ describe('MemoryEngine', () => {
   });
 
   describe('createMemoryEngine', () => {
-    test('returns engine with expected API', () => {
-      expect(mem.name).toBe('memory-engine');
-      expect(mem.version).toBe('1.0.0');
-      expect(typeof mem.recordInteraction).toBe('function');
-      expect(typeof mem.recordQuery).toBe('function');
-      expect(typeof mem.learn).toBe('function');
-      expect(typeof mem.getInteractions).toBe('function');
-      expect(typeof mem.getQueries).toBe('function');
-      expect(typeof mem.getLearnings).toBe('function');
-      expect(typeof mem.stats).toBe('function');
-      expect(typeof mem.clear).toBe('function');
-      expect(typeof mem.commands).toBe('object');
-      expect(typeof mem.commands.memory).toBe('function');
+    test('returns memory engine with expected API', () => {
+      expect(memory).toBeDefined();
+      expect(memory.name).toBe('memory-engine');
+      expect(memory.version).toBe('1.0.0');
+      expect(typeof memory.store).toBe('function');
+      expect(typeof memory.retrieve).toBe('function');
+      expect(typeof memory.forget).toBe('function');
+      expect(typeof memory.append).toBe('function');
+      expect(typeof memory.getHistory).toBe('function');
+      expect(typeof memory.learn).toBe('function');
+      expect(typeof memory.getFacts).toBe('function');
+      expect(typeof memory.persist).toBe('function');
+      expect(typeof memory.load).toBe('function');
+      expect(typeof memory.summary).toBe('function');
+      expect(memory.commands).toBeDefined();
     });
   });
 
-  describe('recordInteraction', () => {
-    test('records and returns an id', () => {
-      const r = mem.recordInteraction('chat', 'hello', 'hi there');
-      expect(r).toHaveProperty('id');
-      expect(typeof r.id).toBe('number');
-      expect(r.id).toBeGreaterThan(0);
+  describe('store / retrieve / forget', () => {
+    test('stores and retrieves a value', () => {
+      memory.store('foo', 'bar');
+      expect(memory.retrieve('foo')).toBe('bar');
     });
 
-    test('stored interaction is retrievable', () => {
-      mem.recordInteraction('chat', 'what is the time?', 'now');
-      const list = mem.getInteractions(10);
-      expect(list.length).toBe(1);
-      expect(list[0].mode).toBe('chat');
-      expect(list[0].input).toBe('what is the time?');
-      expect(list[0].response).toBe('now');
+    test('stores objects', () => {
+      memory.store('obj', { x: 1 });
+      expect(memory.retrieve('obj')).toEqual({ x: 1 });
     });
 
-    test('filters by mode', () => {
-      mem.recordInteraction('chat', 'a', 'a');
-      mem.recordInteraction('code', 'b', 'b');
-      const chatOnly = mem.getInteractions(10, 'chat');
-      expect(chatOnly.length).toBe(1);
-      expect(chatOnly[0].mode).toBe('chat');
+    test('retrieve returns undefined for unknown key', () => {
+      expect(memory.retrieve('nonexistent')).toBeUndefined();
     });
 
-    test('returns most recent first', () => {
-      mem.recordInteraction('chat', 'first',  'r1');
-      mem.recordInteraction('chat', 'second', 'r2');
-      const list = mem.getInteractions(5);
-      expect(list[0].input).toBe('second');
-      expect(list[1].input).toBe('first');
+    test('forget removes a key', () => {
+      memory.store('key', 'val');
+      memory.forget('key');
+      expect(memory.retrieve('key')).toBeUndefined();
     });
-  });
 
-  describe('recordQuery', () => {
-    test('records and retrieves a query', () => {
-      const r = mem.recordQuery('ls /tmp', { command: 'ls', args: ['/tmp'] }, 'terminal');
-      expect(r).toHaveProperty('id');
-      const queries = mem.getQueries(5);
-      expect(queries.length).toBe(1);
-      expect(queries[0].raw).toBe('ls /tmp');
-      expect(queries[0].source).toBe('terminal');
+    test('store throws for empty key', () => {
+      expect(() => memory.store('', 'val')).toThrow(TypeError);
+      expect(() => memory.store(null, 'val')).toThrow(TypeError);
+    });
+
+    test('listKeys returns all stored keys', () => {
+      memory.store('a', 1);
+      memory.store('b', 2);
+      const keys = memory.listKeys();
+      expect(keys).toContain('a');
+      expect(keys).toContain('b');
+    });
+
+    test('store emits memory:stored event', () => {
+      const handler = jest.fn();
+      kernel.bus.on('memory:stored', handler);
+      memory.store('key', 'val');
+      expect(handler).toHaveBeenCalledWith({ key: 'key' });
     });
   });
 
-  describe('learn', () => {
-    test('records a learning observation', () => {
-      const r = mem.learn('os', { fact: 'linux is cool' }, 0.9);
-      expect(r).toHaveProperty('id');
-      const list = mem.getLearnings(5);
-      expect(list.length).toBe(1);
-      expect(list[0].topic).toBe('os');
-      expect(list[0].confidence).toBeCloseTo(0.9);
+  describe('interaction history', () => {
+    test('append adds entries to history', () => {
+      memory.append({ role: 'user', content: 'hello' });
+      const hist = memory.getHistory(10);
+      expect(hist).toHaveLength(1);
+      expect(hist[0].content).toBe('hello');
+      expect(hist[0].role).toBe('user');
     });
 
-    test('filters by topic', () => {
-      mem.learn('os',  { x: 1 });
-      mem.learn('net', { y: 2 });
-      const osOnly = mem.getLearnings(10, 'os');
-      expect(osOnly.length).toBe(1);
-      expect(osOnly[0].topic).toBe('os');
+    test('getHistory returns N most recent entries', () => {
+      for (let i = 0; i < 10; i++) {
+        memory.append({ role: 'user', content: `msg ${i}` });
+      }
+      expect(memory.getHistory(5)).toHaveLength(5);
     });
 
-    test('clamps confidence to 0-1', () => {
-      mem.learn('topic', {}, 5);
-      const list = mem.getLearnings(5);
-      expect(list[0].confidence).toBe(1);
+    test('append defaults role to "user"', () => {
+      memory.append({ content: 'test' });
+      expect(memory.getHistory(1)[0].role).toBe('user');
+    });
 
-      mem.learn('topic2', {}, -3);
-      const list2 = mem.getLearnings(5);
-      const item = list2.find(l => l.topic === 'topic2');
-      expect(item.confidence).toBe(0);
+    test('append ignores entries without content', () => {
+      memory.append(null);
+      memory.append({ role: 'user' });
+      expect(memory.getHistory(10)).toHaveLength(0);
+    });
+
+    test('clearHistory empties history', () => {
+      memory.append({ role: 'user', content: 'hi' });
+      memory.clearHistory();
+      expect(memory.getHistory(10)).toHaveLength(0);
+    });
+
+    test('append emits memory:appended event', () => {
+      const handler = jest.fn();
+      kernel.bus.on('memory:appended', handler);
+      memory.append({ role: 'user', content: 'test' });
+      expect(handler).toHaveBeenCalled();
     });
   });
 
-  describe('stats', () => {
+  describe('learning', () => {
+    test('learn stores a fact', () => {
+      memory.learn({ content: 'AIOS is an AI OS' });
+      const facts = memory.getFacts();
+      expect(facts).toHaveLength(1);
+      expect(facts[0].content).toBe('AIOS is an AI OS');
+      expect(facts[0].confidence).toBe(1.0);
+    });
+
+    test('learn ignores empty content', () => {
+      memory.learn({ content: '' });
+      memory.learn(null);
+      expect(memory.getFacts()).toHaveLength(0);
+    });
+
+    test('learn stores source and confidence', () => {
+      memory.learn({ content: 'fact', source: 'test', confidence: 0.8 });
+      const fact = memory.getFacts()[0];
+      expect(fact.source).toBe('test');
+      expect(fact.confidence).toBe(0.8);
+    });
+
+    test('learn emits memory:learned event', () => {
+      const handler = jest.fn();
+      kernel.bus.on('memory:learned', handler);
+      memory.learn({ content: 'a fact' });
+      expect(handler).toHaveBeenCalled();
+    });
+  });
+
+  describe('summary', () => {
     test('returns correct counts', () => {
-      mem.recordInteraction('chat', 'a', 'a');
-      mem.recordQuery('q', {}, 'test');
-      mem.learn('t', {});
-      const s = mem.stats();
-      expect(s.interactions.count).toBe(1);
-      expect(s.queries.count).toBe(1);
-      expect(s.learnings.count).toBe(1);
-      expect(s.totalRecords).toBe(3);
+      memory.store('k', 'v');
+      memory.append({ role: 'user', content: 'hi' });
+      memory.learn({ content: 'fact' });
+      const s = memory.summary();
+      expect(s.contextKeys).toBe(1);
+      expect(s.historyEntries).toBe(1);
+      expect(s.learnedFacts).toBe(1);
     });
   });
 
-  describe('clear', () => {
-    test('clears all stores', () => {
-      mem.recordInteraction('chat', 'x', 'y');
-      mem.recordQuery('z', {}, 'test');
-      mem.learn('t', {});
-      mem.clear();
-      const s = mem.stats();
-      expect(s.totalRecords).toBe(0);
+  describe('persistence (without VFS)', () => {
+    test('persist and load do not throw when vfs is null', () => {
+      expect(() => memory.persist()).not.toThrow();
+      expect(() => memory.load()).not.toThrow();
     });
   });
 
-  describe('commands interface', () => {
-    test('memory stats returns stats', () => {
-      const r = mem.commands.memory(['stats']);
+  describe('commands', () => {
+    test('memory summary command', () => {
+      const r = memory.commands.memory([]);
       expect(r.status).toBe('ok');
       expect(r.result).toContain('Memory Engine');
     });
 
-    test('memory history returns history', () => {
-      mem.recordInteraction('chat', 'hi', 'hello');
-      const r = mem.commands.memory(['history']);
+    test('memory history command', () => {
+      memory.append({ role: 'user', content: 'hello' });
+      const r = memory.commands.memory(['history']);
       expect(r.status).toBe('ok');
-      expect(r.result).toContain('chat');
+      expect(r.result).toContain('hello');
     });
 
-    test('memory queries returns queries', () => {
-      mem.recordQuery('test query', {}, 'test');
-      const r = mem.commands.memory(['queries']);
+    test('memory history empty', () => {
+      const r = memory.commands.memory(['history']);
       expect(r.status).toBe('ok');
-      expect(r.result).toContain('test query');
+      expect(r.result).toContain('No history');
     });
 
-    test('memory learn returns learnings', () => {
-      mem.learn('topic', { x: 1 });
-      const r = mem.commands.memory(['learn']);
+    test('memory facts command', () => {
+      memory.learn({ content: 'test fact' });
+      const r = memory.commands.memory(['facts']);
       expect(r.status).toBe('ok');
-      expect(r.result).toContain('topic');
+      expect(r.result).toContain('test fact');
     });
 
-    test('memory clear clears and reports', () => {
-      mem.recordInteraction('chat', 'x', 'y');
-      const r = mem.commands.memory(['clear']);
+    test('memory facts empty', () => {
+      const r = memory.commands.memory(['facts']);
       expect(r.status).toBe('ok');
-      expect(mem.stats().totalRecords).toBe(0);
+      expect(r.result).toContain('No facts');
     });
 
-    test('memory default with no args shows stats', () => {
-      const r = mem.commands.memory([]);
+    test('memory store command', () => {
+      const r = memory.commands.memory(['store', 'mykey', 'myvalue']);
       expect(r.status).toBe('ok');
-      expect(r.result).toContain('Memory Engine');
+      expect(memory.retrieve('mykey')).toBe('myvalue');
     });
-  });
 
-  describe('cap enforcement', () => {
-    test('trims interactions when maxInteractions is exceeded', () => {
-      const small = createMemoryEngine(null, { maxInteractions: 3 });
-      for (let i = 0; i < 5; i++) small.recordInteraction('chat', `msg${i}`, 'r');
-      expect(small.getInteractions(10).length).toBe(3);
+    test('memory get command', () => {
+      memory.store('x', 42);
+      const r = memory.commands.memory(['get', 'x']);
+      expect(r.status).toBe('ok');
+      expect(r.result).toContain('42');
+    });
+
+    test('memory get missing key', () => {
+      const r = memory.commands.memory(['get', 'missing']);
+      expect(r.status).toBe('error');
+    });
+
+    test('memory forget command', () => {
+      memory.store('del', 'v');
+      const r = memory.commands.memory(['forget', 'del']);
+      expect(r.status).toBe('ok');
+      expect(memory.retrieve('del')).toBeUndefined();
+    });
+
+    test('memory keys command', () => {
+      memory.store('alpha', 1);
+      const r = memory.commands.memory(['keys']);
+      expect(r.status).toBe('ok');
+      expect(r.result).toContain('alpha');
+    });
+
+    test('memory persist command', () => {
+      const r = memory.commands.memory(['persist']);
+      expect(r.status).toBe('ok');
+    });
+
+    test('memory clear command', () => {
+      memory.append({ role: 'user', content: 'hello' });
+      const r = memory.commands.memory(['clear']);
+      expect(r.status).toBe('ok');
+      expect(memory.getHistory(10)).toHaveLength(0);
+    });
+
+    test('memory unknown sub returns usage', () => {
+      const r = memory.commands.memory(['unknown']);
+      expect(r.status).toBe('ok');
+      expect(r.result).toContain('Usage');
     });
   });
 });

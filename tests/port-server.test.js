@@ -1,201 +1,236 @@
 'use strict';
 
-const net = require('net');
-const { createKernel } = require('../core/kernel');
-const { createRouter } = require('../core/router');
-const { createPortServer } = require('../core/port-server');
+const { createPortServer }  = require('../core/port-server');
+const { createKernel }      = require('../core/kernel');
+const http                  = require('http');
 
-// Pick a random high port to avoid conflicts across parallel test runs
-const TEST_PORT = 17700 + Math.floor(Math.random() * 100);
+// ---------------------------------------------------------------------------
+// Helper — simple HTTP request for tests
+// ---------------------------------------------------------------------------
+function request(opts, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : undefined;
+    const reqOpts = Object.assign({
+      hostname: '127.0.0.1',
+      headers:  {},
+    }, opts);
+    if (payload) {
+      reqOpts.headers['Content-Type']   = 'application/json';
+      reqOpts.headers['Content-Length'] = Buffer.byteLength(payload);
+    }
+    const req = http.request(reqOpts, (res) => {
+      let data = '';
+      res.on('data', d => { data += d; });
+      res.on('end',  () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch (_) { resolve({ status: res.statusCode, body: data }); }
+      });
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 describe('PortServer', () => {
   let kernel;
-  let router;
-  let srv;
+  let server;
+  let testPort;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     kernel = createKernel();
     kernel.boot();
-    router = createRouter({ logger: null });
-    router.registerCommand('ping', () => ({ status: 'ok', result: 'pong' }));
-    srv = createPortServer(kernel, router, null, { port: TEST_PORT });
+    // Use a random high port to avoid conflicts
+    testPort = 14000 + Math.floor(Math.random() * 1000);
+    server   = createPortServer(kernel, null, null, null);
+    await server.start({ port: testPort });
   });
 
   afterEach(async () => {
-    await srv.stop();
+    await server.stop();
     kernel.shutdown();
   });
 
   describe('createPortServer', () => {
     test('returns object with expected API', () => {
-      expect(srv.name).toBe('port-server');
-      expect(srv.version).toBe('1.0.0');
-      expect(typeof srv.start).toBe('function');
-      expect(typeof srv.stop).toBe('function');
-      expect(typeof srv.canBind).toBe('function');
-      expect(typeof srv.info).toBe('function');
-      expect(typeof srv.commands).toBe('object');
-      expect(typeof srv.commands['port-server']).toBe('function');
-    });
-
-    test('info shows initial state', () => {
-      const i = srv.info();
-      expect(i.running).toBe(false);
-      expect(i.port).toBe(TEST_PORT);
-      expect(i.connections).toBe(0);
-      expect(i.requests).toBe(0);
-    });
-  });
-
-  describe('canBind', () => {
-    test('returns ok when port is free', async () => {
-      const r = await srv.canBind();
-      expect(r.ok).toBe(true);
-      expect(r.port).toBe(TEST_PORT);
-    });
-
-    test('returns ok when server is already running', async () => {
-      await srv.start();
-      const r = await srv.canBind();
-      expect(r.ok).toBe(true);
-    });
-
-    test('returns error when port is taken', async () => {
-      // Occupy the port with a different server
-      const blocker = net.createServer();
-      await new Promise(res => blocker.listen(TEST_PORT, '127.0.0.1', res));
-      try {
-        const r = await srv.canBind();
-        expect(r.ok).toBe(false);
-        expect(r.error).toBeTruthy();
-      } finally {
-        await new Promise(res => blocker.close(res));
-      }
+      expect(server).toBeDefined();
+      expect(server.name).toBe('port-server');
+      expect(server.version).toBe('1.0.0');
+      expect(typeof server.start).toBe('function');
+      expect(typeof server.stop).toBe('function');
+      expect(typeof server.status).toBe('function');
+      expect(server.commands).toBeDefined();
     });
   });
 
   describe('start / stop', () => {
-    test('starts the server', async () => {
-      const r = await srv.start();
+    test('status is started after start()', () => {
+      expect(server.status().started).toBe(true);
+    });
+
+    test('status is stopped after stop()', async () => {
+      await server.stop();
+      expect(server.status().started).toBe(false);
+    });
+
+    test('start twice returns "already running" note', async () => {
+      const r = await server.start({ port: testPort });
       expect(r.ok).toBe(true);
-      expect(r.port).toBe(TEST_PORT);
-      expect(srv.info().running).toBe(true);
+      expect(r.note).toContain('already');
     });
 
-    test('start is idempotent when already running', async () => {
-      await srv.start();
-      const r2 = await srv.start();
-      expect(r2.ok).toBe(true);
-    });
-
-    test('stop sets running to false', async () => {
-      await srv.start();
-      await srv.stop();
-      expect(srv.info().running).toBe(false);
-    });
-
-    test('stop is safe when not running', async () => {
-      const r = await srv.stop();
+    test('stop when not running returns ok', async () => {
+      await server.stop();
+      const r = await server.stop();
       expect(r.ok).toBe(true);
     });
 
-    test('emits kernel bus events on start and stop', async () => {
-      const events = [];
-      kernel.bus.on('port-server:started', (d) => events.push({ type: 'start', ...d }));
-      kernel.bus.on('port-server:stopped', (d) => events.push({ type: 'stop',  ...d }));
-
-      await srv.start();
-      await srv.stop();
-
-      expect(events.find(e => e.type === 'start')).toBeTruthy();
-      expect(events.find(e => e.type === 'stop')).toBeTruthy();
+    test('emits port:started event', async () => {
+      const p2   = testPort + 500;
+      const srv2 = createPortServer(kernel, null, null, null);
+      const handler = jest.fn();
+      kernel.bus.on('port:started', handler);
+      await srv2.start({ port: p2 });
+      await srv2.stop();
+      expect(handler).toHaveBeenCalled();
     });
   });
 
-  describe('JSON protocol', () => {
-    test('handles a valid request and returns JSON response', async () => {
-      await srv.start();
-
-      const response = await new Promise((resolve, reject) => {
-        const client = net.connect(TEST_PORT, '127.0.0.1', () => {
-          client.write(JSON.stringify({ id: 1, command: 'ping' }) + '\n');
-        });
-        let buf = '';
-        client.on('data', (chunk) => {
-          buf += chunk.toString();
-          if (buf.includes('\n')) {
-            client.destroy();
-            try { resolve(JSON.parse(buf.trim())); } catch (e) { reject(e); }
-          }
-        });
-        client.on('error', reject);
-        setTimeout(() => reject(new Error('timeout')), 3000);
-      });
-
-      expect(response.id).toBe(1);
-      expect(response.status).toBe('ok');
-      expect(response.result).toBe('pong');
+  describe('HTTP endpoints', () => {
+    test('GET / returns welcome JSON', async () => {
+      const r = await request({ method: 'GET', port: testPort, path: '/' });
+      expect(r.status).toBe(200);
+      expect(r.body.system).toBe('AIOS');
+      expect(Array.isArray(r.body.endpoints)).toBe(true);
     });
 
-    test('returns error for invalid JSON', async () => {
-      await srv.start();
-
-      const response = await new Promise((resolve, reject) => {
-        const client = net.connect(TEST_PORT, '127.0.0.1', () => {
-          client.write('not-valid-json\n');
-        });
-        let buf = '';
-        client.on('data', (chunk) => {
-          buf += chunk.toString();
-          if (buf.includes('\n')) {
-            client.destroy();
-            try { resolve(JSON.parse(buf.trim())); } catch (e) { reject(e); }
-          }
-        });
-        client.on('error', reject);
-        setTimeout(() => reject(new Error('timeout')), 3000);
-      });
-
-      expect(response.status).toBe('error');
-      expect(response.result).toMatch(/invalid json/i);
+    test('GET /status returns status JSON', async () => {
+      const r = await request({ method: 'GET', port: testPort, path: '/status' });
+      expect(r.status).toBe(200);
+      expect(typeof r.body.uptime).toBe('number');
+      expect(typeof r.body.requests).toBe('number');
     });
 
-    test('returns error for missing command', async () => {
-      await srv.start();
+    test('GET /report returns text (503 when no diagnostics engine)', async () => {
+      const r = await request({ method: 'GET', port: testPort, path: '/report' });
+      expect([200, 503]).toContain(r.status);
+    });
 
-      const response = await new Promise((resolve, reject) => {
-        const client = net.connect(TEST_PORT, '127.0.0.1', () => {
-          client.write(JSON.stringify({ id: 2 }) + '\n');
-        });
-        let buf = '';
-        client.on('data', (chunk) => {
-          buf += chunk.toString();
-          if (buf.includes('\n')) {
-            client.destroy();
-            try { resolve(JSON.parse(buf.trim())); } catch (e) { reject(e); }
-          }
-        });
-        client.on('error', reject);
-        setTimeout(() => reject(new Error('timeout')), 3000);
-      });
+    test('GET /models returns JSON', async () => {
+      const r = await request({ method: 'GET', port: testPort, path: '/models' });
+      expect(r.status).toBe(200);
+    });
 
-      expect(response.status).toBe('error');
-      expect(response.result).toMatch(/missing command/i);
+    test('POST /ai with no router returns 503', async () => {
+      const r = await request(
+        { method: 'POST', port: testPort, path: '/ai' },
+        { input: 'hello', mode: 'chat' }
+      );
+      expect(r.status).toBe(503);
+    });
+
+    test('POST /ai with empty input returns 400', async () => {
+      const r = await request(
+        { method: 'POST', port: testPort, path: '/ai' },
+        { input: '' }
+      );
+      expect(r.status).toBe(400);
+    });
+
+    test('POST /command with no router returns 503', async () => {
+      const r = await request(
+        { method: 'POST', port: testPort, path: '/command' },
+        { command: 'help' }
+      );
+      expect(r.status).toBe(503);
+    });
+
+    test('POST /command with empty command returns 400', async () => {
+      const r = await request(
+        { method: 'POST', port: testPort, path: '/command' },
+        { command: '' }
+      );
+      expect(r.status).toBe(400);
+    });
+
+    test('POST /ai with invalid JSON returns 400', async () => {
+      await new Promise((resolve, reject) => {
+        const req = http.request({
+          hostname: '127.0.0.1',
+          port:     testPort,
+          path:     '/ai',
+          method:   'POST',
+          headers:  { 'Content-Type': 'application/json', 'Content-Length': 5 },
+        }, (res) => {
+          res.resume();
+          resolve(res.statusCode);
+        });
+        req.on('error', reject);
+        req.write('not{j');
+        req.end();
+      }).then(status => { expect(status).toBe(400); });
+    });
+
+    test('GET /unknown returns 404', async () => {
+      const r = await request({ method: 'GET', port: testPort, path: '/does-not-exist' });
+      expect(r.status).toBe(404);
+    });
+
+    test('requests counter increments', async () => {
+      const before = server.status().requests;
+      await request({ method: 'GET', port: testPort, path: '/status' });
+      await request({ method: 'GET', port: testPort, path: '/status' });
+      expect(server.status().requests).toBe(before + 2);
     });
   });
 
-  describe('commands interface', () => {
-    test('port-server status when stopped', () => {
-      const r = srv.commands['port-server'](['status']);
+  describe('commands', () => {
+    test('port status command', async () => {
+      const r = await server.commands.port(['status']);
       expect(r.status).toBe('ok');
-      expect(r.result).toContain('Port Server');
-      expect(r.result).toContain('false');
+      expect(r.result).toContain('running');
+      expect(r.result).toContain(String(testPort));
     });
 
-    test('port-server unknown sub returns usage', () => {
-      const r = srv.commands['port-server'](['unknown']);
+    test('port start command (already running)', async () => {
+      const r = await server.commands.port(['start', String(testPort)]);
+      expect(r.status).toBe('ok');
+    });
+
+    test('port stop command', async () => {
+      const r = await server.commands.port(['stop']);
+      expect(r.status).toBe('ok');
+      expect(server.status().started).toBe(false);
+      // Re-start for afterEach cleanup
+      await server.start({ port: testPort });
+    });
+
+    test('port unknown sub returns usage', async () => {
+      const r = await server.commands.port(['unknown']);
       expect(r.status).toBe('ok');
       expect(r.result).toContain('Usage');
+    });
+  });
+
+  describe('with router', () => {
+    test('POST /command routes to router', async () => {
+      const { createRouter } = require('../core/router');
+      const router = createRouter({ logger: null });
+      const srv2   = createPortServer(kernel, router, null, null);
+      const p2     = testPort + 600;
+      await srv2.start({ port: p2 });
+
+      const r = await request(
+        { method: 'POST', port: p2, path: '/command' },
+        { command: 'help' }
+      );
+      await srv2.stop();
+
+      expect(r.status).toBe(200);
+      expect(r.body.status).toBe('ok');
     });
   });
 });

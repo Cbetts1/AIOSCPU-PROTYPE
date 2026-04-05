@@ -2,151 +2,191 @@
 /**
  * port-server.js — AIOS Port Server v1.0.0
  *
- * Opens a single TCP communication port to accept JSON-encoded queries from
- * external processes, forwards them through the AIOS router, and returns
- * JSON-encoded responses.
+ * A single HTTP port server that exposes AIOS functionality over the network.
  *
- * Wire protocol (newline-delimited JSON):
- *   Request  → { "id": <number|string>, "command": "<cmd>", "args": [...] }
- *   Response → { "id": <same>, "status": "ok"|"error", "result": <string> }
+ * Endpoints:
+ *   GET  /              → welcome + status
+ *   GET  /status        → JSON system status
+ *   GET  /report        → diagnostics report
+ *   GET  /models        → registered model list
+ *   POST /ai            → route to AI consciousness (body: { input, mode })
+ *   POST /command       → route to AIOS router    (body: { command })
  *
- * Security: by default the server binds to 127.0.0.1 (loopback only).
- * It accepts one connection at a time to keep resource usage minimal.
+ * Default port: 4000 (override via AIOS_PORT env var or start({ port }) option)
  *
- * Zero external npm dependencies.
+ * Zero external npm dependencies (Node.js built-in http module only).
  */
 
-const net = require('net');
-
-const PORT_SERVER_VERSION = '1.0.0';
-const DEFAULT_HOST        = '127.0.0.1';
-const DEFAULT_PORT        = 7700;
+const http = require('http');
 
 // ---------------------------------------------------------------------------
-// createPortServer
+// Port Server factory
 // ---------------------------------------------------------------------------
-/**
- * @param {object} kernel          - AIOS kernel instance
- * @param {object} router          - AIOS router (must have .dispatch())
- * @param {object} [diagnostics]   - optional diagnostics engine for port registration
- * @param {object} [opts]
- * @param {number} [opts.port]     - TCP port to listen on (default 7700)
- * @param {string} [opts.host]     - bind address (default '127.0.0.1')
- */
-function createPortServer(kernel, router, diagnostics, opts = {}) {
-  const _port = opts.port != null ? Number(opts.port) : DEFAULT_PORT;
-  const _host = String(opts.host || DEFAULT_HOST);
+function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
+  let _server   = null;
+  let _port     = parseInt(process.env.AIOS_PORT, 10) || 4000;
+  let _started  = false;
+  let _requests = 0;
+  let _errors   = 0;
 
-  let _server  = null;
-  let _running = false;
-  let _connCount = 0;
-  let _reqCount  = 0;
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  function _ts() { return new Date().toISOString().slice(11, 19); }
-
-  function _log(msg) {
-    process.stdout.write(`  \x1b[36m[PORT]\x1b[0m  [${_ts()}] ${msg}\n`);
+  function _json(res, code, data) {
+    const body = JSON.stringify(data, null, 2);
+    res.writeHead(code, {
+      'Content-Type':   'application/json',
+      'Content-Length': Buffer.byteLength(body),
+      'X-AIOS':         'port-server/1.0.0',
+    });
+    res.end(body);
   }
 
-  // ── Handle one socket connection ──────────────────────────────────────────
-  function _handleSocket(socket) {
-    _connCount++;
-    const remote = `${socket.remoteAddress}:${socket.remotePort}`;
-    _log(`Connection from ${remote}`);
+  function _text(res, code, text) {
+    const body = String(text);
+    res.writeHead(code, {
+      'Content-Type':   'text/plain; charset=utf-8',
+      'Content-Length': Buffer.byteLength(body),
+      'X-AIOS':         'port-server/1.0.0',
+    });
+    res.end(body);
+  }
 
-    let _buf = '';
+  function _readBody(req) {
+    return new Promise((resolve, reject) => {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+        if (body.length > 64 * 1024) { req.destroy(); reject(new Error('Request too large')); }
+      });
+      req.on('end',   () => resolve(body));
+      req.on('error', reject);
+    });
+  }
 
-    socket.setEncoding('utf8');
+  // ── Request handler ───────────────────────────────────────────────────────
 
-    socket.on('data', async (chunk) => {
-      _buf += chunk;
-      let newline;
-      // Process each newline-delimited JSON message
-      while ((newline = _buf.indexOf('\n')) !== -1) {
-        const line = _buf.slice(0, newline).trim();
-        _buf        = _buf.slice(newline + 1);
-        if (!line) continue;
+  async function _handleRequest(req, res) {
+    _requests++;
+    const url    = req.url.split('?')[0].replace(/\/$/, '') || '/';
+    const method = req.method.toUpperCase();
 
-        _reqCount++;
-        let req;
-        try {
-          req = JSON.parse(line);
-        } catch (_) {
-          const errResp = JSON.stringify({ id: null, status: 'error', result: 'Invalid JSON' });
-          socket.write(errResp + '\n');
-          continue;
-        }
+    if (kernel) kernel.bus.emit('port:request', { method, url });
 
-        const id      = req.id != null ? req.id : null;
-        const command = String(req.command || '').trim();
-        const args    = Array.isArray(req.args) ? req.args.map(String) : [];
-
-        if (!command) {
-          socket.write(JSON.stringify({ id, status: 'error', result: 'Missing command' }) + '\n');
-          continue;
-        }
-
-        // Dispatch through AIOS router
-        let result;
-        try {
-          const input = args.length ? `${command} ${args.join(' ')}` : command;
-          const r = await router.handle(input);
-          result = { id, status: r.status || 'ok', result: r.result != null ? String(r.result) : '' };
-        } catch (e) {
-          result = { id, status: 'error', result: `Dispatch error: ${e.message}` };
-        }
-
-        socket.write(JSON.stringify(result) + '\n');
+    try {
+      // GET /
+      if (method === 'GET' && (url === '/' || url === '')) {
+        return _json(res, 200, {
+          system:  'AIOS',
+          version: '1.0.0',
+          port:    _port,
+          uptime:  kernel ? kernel.uptime() : 0,
+          endpoints: ['GET /', 'GET /status', 'GET /report', 'GET /models', 'POST /ai', 'POST /command'],
+        });
       }
-    });
 
-    socket.on('error', (err) => {
-      _log(`Socket error from ${remote}: ${err.message}`);
-    });
+      // GET /status
+      if (method === 'GET' && url === '/status') {
+        return _json(res, 200, {
+          ts:       new Date().toISOString(),
+          healthy:  kernel ? kernel.isBooted() : false,
+          uptime:   kernel ? kernel.uptime() : 0,
+          requests: _requests,
+          errors:   _errors,
+          port:     _port,
+        });
+      }
 
-    socket.on('close', () => {
-      _connCount = Math.max(0, _connCount - 1);
-    });
+      // GET /report
+      if (method === 'GET' && url === '/report') {
+        if (diagnosticsEngine) {
+          const report = await diagnosticsEngine.generateReport();
+          return _text(res, 200, report);
+        }
+        return _json(res, 503, { error: 'Diagnostics engine not available' });
+      }
+
+      // GET /models
+      if (method === 'GET' && url === '/models') {
+        if (consciousness && consciousness.getContext) {
+          // Try to get model list from consciousness
+        }
+        return _json(res, 200, { note: 'Use /status for model information' });
+      }
+
+      // POST /ai
+      if (method === 'POST' && url === '/ai') {
+        const rawBody = await _readBody(req);
+        let parsed;
+        try { parsed = JSON.parse(rawBody); }
+        catch (_) { return _json(res, 400, { error: 'Invalid JSON body' }); }
+
+        const input = String(parsed.input || '').trim();
+        const mode  = String(parsed.mode  || 'chat').trim();
+        if (!input) return _json(res, 400, { error: '`input` field is required' });
+
+        if (consciousness) {
+          const result = await consciousness.query(input, { mode });
+          return _json(res, 200, { status: 'ok', result: result.result, model: result.model, mode });
+        }
+        if (router) {
+          const result = await router.handle(`ai ${input}`);
+          return _json(res, 200, result);
+        }
+        return _json(res, 503, { error: 'AI not available' });
+      }
+
+      // POST /command
+      if (method === 'POST' && url === '/command') {
+        const rawBody = await _readBody(req);
+        let parsed;
+        try { parsed = JSON.parse(rawBody); }
+        catch (_) { return _json(res, 400, { error: 'Invalid JSON body' }); }
+
+        const command = String(parsed.command || '').trim();
+        if (!command) return _json(res, 400, { error: '`command` field is required' });
+
+        if (!router) return _json(res, 503, { error: 'Router not available' });
+        const result = await router.handle(command);
+        return _json(res, 200, result);
+      }
+
+      // 404
+      return _json(res, 404, { error: `No route for ${method} ${url}` });
+
+    } catch (e) {
+      _errors++;
+      if (kernel) kernel.bus.emit('port:error', { method, url, error: e.message });
+      return _json(res, 500, { error: e.message });
+    }
   }
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  // ── Start / stop ──────────────────────────────────────────────────────────
 
   /**
    * Start the port server.
-   * @returns {Promise<{ ok: boolean, port?: number, host?: string, error?: string }>}
+   * @param {{ port?: number, hostname?: string }} [opts]
+   * @returns {{ ok: boolean, port: number, error?: string }}
    */
-  function start() {
-    if (_running) {
-      return Promise.resolve({ ok: true, port: _port, host: _host });
-    }
+  function start(opts) {
+    if (_started) return { ok: true, port: _port, note: 'already running' };
+
+    const port     = (opts && opts.port) ? opts.port : _port;
+    const hostname = (opts && opts.hostname) ? opts.hostname : '127.0.0.1';
+
+    _port   = port;
+    _server = http.createServer(_handleRequest);
 
     return new Promise((resolve) => {
-      _server = net.createServer({ allowHalfOpen: false });
-
-      _server.on('connection', _handleSocket);
-
-      _server.on('error', (err) => {
-        _running = false;
-        _log(`Server error: ${err.message}`);
-        if (diagnostics) diagnostics.reportPort(_port, false);
-        if (kernel && kernel.bus) {
-          kernel.bus.emit('port-server:error', { port: _port, error: err.message });
-        }
-        resolve({ ok: false, error: err.message });
+      _server.on('error', (e) => {
+        _started = false;
+        if (kernel) kernel.bus.emit('port:start-error', { error: e.message });
+        resolve({ ok: false, port, error: e.message });
       });
 
-      _server.listen(_port, _host, () => {
-        _running = true;
-        _log(`Listening on ${_host}:${_port}`);
-        if (diagnostics) {
-          diagnostics.registerPort(_port, 'tcp', 'AIOS Port Server');
-          diagnostics.reportPort(_port, true);
-        }
-        if (kernel && kernel.bus) {
-          kernel.bus.emit('port-server:started', { port: _port, host: _host });
-        }
-        resolve({ ok: true, port: _port, host: _host });
+      _server.listen(port, hostname, () => {
+        _started = true;
+        if (kernel) kernel.bus.emit('port:started', { port, hostname });
+        resolve({ ok: true, port, hostname });
       });
     });
   }
@@ -156,104 +196,73 @@ function createPortServer(kernel, router, diagnostics, opts = {}) {
    * @returns {Promise<{ ok: boolean }>}
    */
   function stop() {
-    if (!_running || !_server) return Promise.resolve({ ok: true });
-
+    if (!_started || !_server) return Promise.resolve({ ok: true });
     return new Promise((resolve) => {
       _server.close(() => {
-        _running = false;
-        _server  = null;
-        _log(`Stopped`);
-        if (diagnostics) diagnostics.reportPort(_port, false);
-        if (kernel && kernel.bus) {
-          kernel.bus.emit('port-server:stopped', { port: _port });
-        }
+        _started = false;
+        if (kernel) kernel.bus.emit('port:stopped', {});
         resolve({ ok: true });
       });
     });
   }
 
-  /**
-   * Attempt to open the port without keeping it listening.
-   * Used by the self-check to confirm the port is available.
-   * @returns {Promise<{ ok: boolean, port?: number, error?: string }>}
-   */
-  function canBind() {
-    return new Promise((resolve) => {
-      if (_running) {
-        resolve({ ok: true, port: _port });
-        return;
-      }
-      const probe = net.createServer();
-      probe.on('error', (err) => {
-        probe.close();
-        resolve({ ok: false, port: _port, error: err.message });
-      });
-      probe.listen(_port, _host, () => {
-        probe.close(() => resolve({ ok: true, port: _port }));
-      });
-    });
-  }
-
-  /** Current server statistics */
-  function info() {
+  /** Return current port server status. */
+  function status() {
     return {
-      running:     _running,
-      host:        _host,
-      port:        _port,
-      connections: _connCount,
-      requests:    _reqCount,
+      started:  _started,
+      port:     _port,
+      requests: _requests,
+      errors:   _errors,
     };
   }
 
   // ── Router command interface ───────────────────────────────────────────────
-  function dispatch(args) {
-    const sub = (args[0] || 'status').toLowerCase().trim();
 
-    if (sub === 'status') {
-      const i = info();
+  const commands = {
+    async port(args) {
+      const sub = (args[0] || 'status').toLowerCase();
+
+      if (sub === 'status') {
+        const s = status();
+        return {
+          status: 'ok',
+          result: [
+            `Port Server v1.0.0`,
+            `Status   : ${s.started ? 'running' : 'stopped'}`,
+            `Port     : ${s.port}`,
+            `Requests : ${s.requests}`,
+            `Errors   : ${s.errors}`,
+          ].join('\n'),
+        };
+      }
+
+      if (sub === 'start') {
+        const p = parseInt(args[1], 10) || _port;
+        const r = await start({ port: p });
+        return r.ok
+          ? { status: 'ok',    result: `Port server started on ${r.hostname || '127.0.0.1'}:${r.port}` }
+          : { status: 'error', result: `Failed to start: ${r.error}` };
+      }
+
+      if (sub === 'stop') {
+        await stop();
+        return { status: 'ok', result: 'Port server stopped.' };
+      }
+
       return {
         status: 'ok',
-        result: [
-          `Port Server v${PORT_SERVER_VERSION}`,
-          `  Running    : ${i.running}`,
-          `  Address    : ${i.host}:${i.port}`,
-          `  Connections: ${i.connections}`,
-          `  Requests   : ${i.requests}`,
-        ].join('\n'),
+        result: 'Usage: port <status|start [port]|stop>',
       };
-    }
-
-    if (sub === 'start') {
-      start().then(r => {
-        if (r.ok) process.stdout.write(`  \x1b[32m[ OK ]\x1b[0m  Port Server started on ${r.host}:${r.port}\n`);
-        else      process.stdout.write(`  \x1b[31m[FAIL]\x1b[0m  Port Server start failed: ${r.error}\n`);
-      });
-      return { status: 'ok', result: `Starting port server on ${_host}:${_port}…` };
-    }
-
-    if (sub === 'stop') {
-      stop().then(() => {
-        process.stdout.write('  \x1b[32m[ OK ]\x1b[0m  Port Server stopped\n');
-      });
-      return { status: 'ok', result: 'Stopping port server…' };
-    }
-
-    return {
-      status: 'ok',
-      result: 'Usage: port-server <status|start|stop>',
-    };
-  }
+    },
+  };
 
   return {
-    name:    'port-server',
-    version: PORT_SERVER_VERSION,
-    // Core API
+    name:     'port-server',
+    version:  '1.0.0',
     start,
     stop,
-    canBind,
-    info,
-    // Router integration
-    commands: { 'port-server': dispatch },
+    status,
+    commands,
   };
 }
 
