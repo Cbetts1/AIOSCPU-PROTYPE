@@ -298,6 +298,7 @@ function createFilesystem() {
       return r.ok ? { status: 'ok', result: `Touched ${r.path}` } : { status: 'error', result: r.error };
     },
     cat:   ([p])             => {
+      if (!p) return { status: 'error', result: 'Usage: cat <path>' };
       const r = read(p);
       return r.ok ? { status: 'ok', result: r.content } : { status: 'error', result: r.error };
     },
@@ -318,12 +319,12 @@ function createFilesystem() {
       return { status: 'ok', result: JSON.stringify(r, null, 2) };
     },
     cp:    ([s, d])          => {
-      if (!s || !d) return { status: 'error', result: 'Usage: cp <source> <destination>' };
+      if (!s || !d) return { status: 'error', result: 'Usage: cp <src> <dest>' };
       const r = cp(s, d);
       return r.ok ? { status: 'ok', result: `Copied to ${r.path}` } : { status: 'error', result: r.error };
     },
     mv:    ([s, d])          => {
-      if (!s || !d) return { status: 'error', result: 'Usage: mv <source> <destination>' };
+      if (!s || !d) return { status: 'error', result: 'Usage: mv <src> <dest>' };
       const r = mv(s, d);
       return r.ok ? { status: 'ok', result: `Moved to ${r.path}` } : { status: 'error', result: r.error };
     },

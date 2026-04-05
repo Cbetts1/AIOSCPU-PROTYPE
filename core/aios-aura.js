@@ -417,7 +417,9 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
         `System alert: kernel service "${name}" failed. Error: "${error}". What happened and what should be done?`,
         { identity: 'aios' },
       );
-      if (r.status === 'ok') process.stdout.write(`\n[AIOS] ${r.result}\n`);
+      if (r.status === 'ok' && !r.fallback) {
+        process.stdout.write(`\n[AIOS] ${r.result}\n`);
+      }
     });
 
     kernel.bus.on('health:memory:low', async ({ usedMB, totalMB }) => {
@@ -425,7 +427,9 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
         `System alert: memory critically low — ${usedMB}MB of ${totalMB}MB used. What are the immediate actions?`,
         { identity: 'aios' },
       );
-      if (r.status === 'ok') process.stdout.write(`\n[AIOS] ${r.result}\n`);
+      if (r.status === 'ok' && !r.fallback) {
+        process.stdout.write(`\n[AIOS] ${r.result}\n`);
+      }
     });
 
     kernel.bus.on('aura:online',  ({ model }) =>

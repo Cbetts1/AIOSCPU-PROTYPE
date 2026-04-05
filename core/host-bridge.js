@@ -256,8 +256,11 @@ function createHostBridge(kernel) {
   // Disk usage
   // ---------------------------------------------------------------------------
   function diskUsage(path) {
-    const target = path || process.env.HOME || '/';
-    const r = _run('df', ['-h', target]);
+    const target = path || (platform.isTermux ? process.env.HOME : '/');
+    // Try human-readable first; fall back to plain df for environments
+    // (e.g. Android /bin/sh wrappers) that reject the -h flag.
+    let r = _run('df', ['-h', target]);
+    if (!r.ok) r = _run('df', [target]);
     if (!r.ok) return { ok: false, error: r.stderr };
     return { ok: true, output: r.stdout };
   }
