@@ -256,7 +256,7 @@ function createHostBridge(kernel) {
   // Disk usage
   // ---------------------------------------------------------------------------
   function diskUsage(path) {
-    const target = path || (platform.isTermux ? process.env.HOME : '/');
+    const target = path || process.env.HOME || '/';
     const r = _run('df', ['-h', target]);
     if (!r.ok) return { ok: false, error: r.stderr };
     return { ok: true, output: r.stdout };
