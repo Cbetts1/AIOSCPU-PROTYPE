@@ -168,7 +168,7 @@ function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
    * @returns {{ ok: boolean, port: number, error?: string }}
    */
   function start(opts) {
-    if (_started) return { ok: true, port: _port, note: 'already running' };
+    if (_started) return Promise.resolve({ ok: true, port: _port, note: 'already running' });
 
     const port     = (opts && opts.port) ? opts.port : _port;
     const hostname = (opts && opts.hostname) ? opts.hostname : '127.0.0.1';
