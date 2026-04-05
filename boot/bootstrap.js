@@ -57,19 +57,14 @@ const { createMirrorSession }   = require('../core/mirror-session.js');
 const { createIdentity }        = require('../core/identity.js');
 const { createMemoryCore }      = require('../core/memory-core.js');
 
-// ── New AIOS core components ─────────────────────────────────────────────────
-const { createMemoryEngine }     = require('../core/memory-engine.js');
-const { createModeManager }      = require('../core/mode-manager.js');
-const { createDiagnosticsEngine }= require('../core/diagnostics-engine.js');
-const { createPortServer }       = require('../core/port-server.js');
-
-// ── Consciousness layer modules ───────────────────────────────────────────────
-const { createMemoryEngine }    = require('../core/memory-engine.js');
-const { createModeManager }     = require('../core/mode-manager.js');
-const { createModelRegistry }   = require('../core/model-registry.js');
-const { createDiagnosticsEngine}= require('../core/diagnostics-engine.js');
-const { createPortServer }      = require('../core/port-server.js');
-const { createConsciousness }   = require('../core/consciousness.js');
+// ── Consciousness layer + Jarvis orchestrator ─────────────────────────────────
+const { createMemoryEngine }         = require('../core/memory-engine.js');
+const { createModeManager }          = require('../core/mode-manager.js');
+const { createModelRegistry }        = require('../core/model-registry.js');
+const { createDiagnosticsEngine }    = require('../core/diagnostics-engine.js');
+const { createPortServer }           = require('../core/port-server.js');
+const { createConsciousness }        = require('../core/consciousness.js');
+const { createJarvisOrchestrator }   = require('../core/jarvis-orchestrator.js');
 
 // ── New OS Integration Layer modules ─────────────────────────────────────────
 const { buildRootFS }           = require('../usr/lib/aios/rootfs-builder.js');
@@ -442,35 +437,9 @@ function start() {
   try { router.unregisterCommand('ai'); } catch (_) {}
   router.use('ai-core-final', aiCoreFinal);
 
-  // ── JARVIS PERSONALITY ────────────────────────────────────────────────────
-  const JARVIS_SYSTEM = 'You are Jarvis, the AI core of AIOS. You have full awareness of: ' +
-    'the kernel event bus and running services, the virtual filesystem at /, ' +
-    'and CPU and memory state. Be direct, brief, and helpful. ' +
-    'When you act on the system, confirm what you did.';
-
-  // ── JARVIS LIGHTWEIGHT BACKEND (phi3 via Ollama) ──────────────────────────
-  aiCoreFinal.registerBackend('jarvis', {
-    wake: async () => {
-      try {
-        const r = await fetch('http://127.0.0.1:11434/api/tags');
-        return r.ok;
-      } catch (_) { return false; }
-    },
-    query: async (prompt) => {
-      const res = await fetch('http://127.0.0.1:11434/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'phi3',
-          prompt: `${JARVIS_SYSTEM}\n\nUser: ${prompt}\nJarvis:`,
-          stream: false,
-        }),
-      });
-      const data = await res.json();
-      return data.response || null;
-    },
-  }, { type: 'local' });
-  bootMsg('ok', 'Jarvis backend registered  (phi3 via Ollama — start ollama to activate)');
+  // Jarvis backends and analyst-model service are registered later, after the
+  // consciousness layer, by jarvisOrchestrator.registerWithAICore() and
+  // jarvisOrchestrator.registerServices().  See section ── 20. JARVIS ──.
 
   // Register built-in services
   svcMgr.register('kernel-watchdog', {
@@ -510,56 +479,6 @@ function start() {
     start() { procfs.start(); },
     stop()  { procfs.stop(); },
   });
-
-  // ── HEAVY MODEL SERVICE (llama3:70b via Ollama — on-demand) ───────────────
-  // Usage: svc start heavy-model  /  svc stop heavy-model
-  svcMgr.register('heavy-model', {
-    async start() {
-      try {
-        await fetch('http://127.0.0.1:11434/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'llama3:70b',
-            prompt: 'ready',
-            stream: false,
-            keep_alive: '1h',
-          }),
-        });
-        kernel.bus.emit('heavy-model:ready', {});
-      } catch (e) {
-        kernel.bus.emit('heavy-model:failed', { error: e.message });
-        throw e;
-      }
-    },
-    async stop() {
-      try {
-        await fetch('http://127.0.0.1:11434/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'llama3:70b', prompt: '', keep_alive: 0 }),
-        });
-      } catch (_) {}
-      kernel.bus.emit('heavy-model:stopped', {});
-    },
-  });
-
-  // ── HEAVY BACKEND — routes complex queries to llama3:70b when loaded ──────
-  aiCoreFinal.registerBackend('heavy', {
-    wake: async () => {
-      const s = svcMgr.status('heavy-model');
-      return s.ok && s.state === 'running';
-    },
-    query: async (prompt) => {
-      const res = await fetch('http://127.0.0.1:11434/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'llama3:70b', prompt, stream: false }),
-      });
-      const data = await res.json();
-      return data.response || null;
-    },
-  }, { type: 'local' });
 
   bootMsg('ok', 'Service Manager  online');
 
@@ -625,6 +544,29 @@ function start() {
   router.use('consciousness', consciousness);
   bootMsg('ok', `Consciousness  v${consciousness.version}  online`);
 
+  // ── 20. JARVIS — Multi-Agent AI Orchestrator ───────────────────────────────
+  // 100 % local via Ollama.  No external APIs.  No tokens.  No cloud.
+  //
+  // Agents built in:
+  //   jarvis   — phi3              (fast, always-on, system-aware)
+  //   code     — deepseek-coder:6.7b  (code / debug queries)
+  //   analyst  — llama3            (deep reasoning, load on demand)
+  //
+  // Terminal: `jarvis <question>`
+  //           `svc start analyst-model`  /  `svc stop analyst-model`
+  const jarvisOrchestrator = createJarvisOrchestrator(
+    kernel, svcMgr, hostBridge, memoryCore, consciousness, modeManager,
+  );
+  // Register jarvis/code/analyst backends into ai-core
+  jarvisOrchestrator.registerWithAICore(aiCoreFinal);
+  // Register analyst-model as a managed svc (svc start/stop analyst-model)
+  jarvisOrchestrator.registerServices();
+  // Mount `jarvis` command into the router
+  kernel.modules.load('jarvis-orchestrator', jarvisOrchestrator);
+  router.use('jarvis-orchestrator', jarvisOrchestrator);
+  bootMsg('ok', 'Jarvis Orchestrator v1.0.0  online  (agents: jarvis, code, analyst — via Ollama)');
+  bootMsg('info', '  → Run `jarvis status` to see agents.  Run `ollama serve` to activate AI.');
+
   // 20e. Diagnostics Engine
   const diagnosticsEngine = createDiagnosticsEngine(kernel, hostBridge, svcMgr, modelRegistry, null, vfs);
   kernel.modules.load('diagnostics-engine', diagnosticsEngine);
@@ -661,6 +603,7 @@ function start() {
     vfs.append('/var/log/boot.log', `[${ts()}] AIOS shutdown after ${uptime}s\n`);
     memoryEngine.persist();
     consciousness.stopProactive();
+    jarvisOrchestrator.stopListening();
     portServer.stop().catch(() => {});
     svcMgr.stopAll().catch(() => {});
     procfs.stop();
@@ -689,6 +632,9 @@ function start() {
     svcMgr.start('ai-monitor').catch(() => {});
     svcMgr.start('host-info-logger').catch(() => {});
     svcMgr.start('procfs-updater').catch(() => {});
+
+    // Jarvis listens to kernel events (service failures, memory pressure, etc.)
+    jarvisOrchestrator.startListening();
 
     scheduler.start();
     diagnostics.start();
