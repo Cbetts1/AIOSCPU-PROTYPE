@@ -132,8 +132,8 @@ AIOSCPU v2.0.0
 ```bash
 # On Android (Termux):
 pkg install nodejs git
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE.git
-cd AIOSCPU-PROTYPE && ./aos
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS.git
+cd AI-OS-vitural-CPU-OS && ./aos
 
 # On desktop:
 node aos
@@ -164,8 +164,8 @@ AIOSCPU> help
 
 ## Contact
 
-- **Repository:** https://github.com/Cbetts1/AIOSCPU-PROTYPE
-- **Issues / Inquiries:** https://github.com/Cbetts1/AIOSCPU-PROTYPE/issues
+- **Repository:** https://github.com/Cbetts1/AI-OS-vitural-CPU-OS
+- **Issues / Inquiries:** https://github.com/Cbetts1/AI-OS-vitural-CPU-OS/issues
 
 ---
 

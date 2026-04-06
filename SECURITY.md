@@ -2,7 +2,7 @@
 
 **Project:** AIOSCPU — AI-Operated Software CPU  
 **Maintainer:** Cbetts1  
-**Repository:** https://github.com/Cbetts1/AIOSCPU-PROTYPE  
+**Repository:** https://github.com/Cbetts1/AI-OS-vitural-CPU-OS  
 
 ---
 
@@ -22,7 +22,7 @@
 If you discover a security vulnerability in AIOSCPU, report it privately:
 
 1. **Open a GitHub Security Advisory** (preferred):  
-   Go to https://github.com/Cbetts1/AIOSCPU-PROTYPE/security/advisories/new  
+   Go to https://github.com/Cbetts1/AI-OS-vitural-CPU-OS/security/advisories/new  
    and submit the details there. This keeps the report private until a fix is deployed.
 
 2. **Alternatively**, open a regular issue and mark it **[SECURITY]** in the title

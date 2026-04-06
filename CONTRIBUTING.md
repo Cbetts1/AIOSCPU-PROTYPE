@@ -9,8 +9,8 @@ By contributing you agree to the terms in [`docs/LEGAL.md`](docs/LEGAL.md).
 
 ```bash
 # Clone the repo
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE.git
-cd AIOSCPU-PROTYPE
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS.git
+cd AI-OS-vitural-CPU-OS
 
 # No npm install needed — zero external dependencies
 
@@ -24,7 +24,7 @@ node aos
 
 ### Reporting Bugs
 
-Open an issue at https://github.com/Cbetts1/AIOSCPU-PROTYPE/issues and include:
+Open an issue at https://github.com/Cbetts1/AI-OS-vitural-CPU-OS/issues and include:
 
 - A clear description of the bug
 - Steps to reproduce it

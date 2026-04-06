@@ -7,7 +7,7 @@
 # ============================================================
 set -euo pipefail
 
-REPO_URL="https://github.com/Cbetts1/AIOSCPU-PROTYPE"
+REPO_URL="https://github.com/Cbetts1/AI-OS-vitural-CPU-OS"
 INSTALL_DIR="${HOME}/aioscpu"
 NODE_MIN_MAJOR=14
 

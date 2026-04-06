@@ -128,7 +128,7 @@ function buildRootFS(vfs, opts = {}) {
       `VARIANT_ID=unikernel`,
       `AIOS_ID="${id.id || ''}"`,
       `AIOS_KERNEL="aios-unikernel"`,
-      `HOME_URL="https://github.com/Cbetts1/AIOSCPU-PROTYPE"`,
+      `HOME_URL="https://github.com/Cbetts1/AI-OS-vitural-CPU-OS"`,
     ].join('\n') + '\n';
   } else {
     osRelease = `NAME="AIOS UniKernel"\nVERSION="${version}"\nID=aios\n`;

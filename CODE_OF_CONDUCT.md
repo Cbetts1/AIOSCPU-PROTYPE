@@ -38,7 +38,7 @@ response to any instances of unacceptable behaviour.
 Instances of abusive, harassing, or otherwise unacceptable behaviour may be
 reported by opening an issue at:
 
-**https://github.com/Cbetts1/AIOSCPU-PROTYPE/issues**
+**https://github.com/Cbetts1/AI-OS-vitural-CPU-OS/issues**
 
 All complaints will be reviewed and investigated and will result in a response
 that is deemed necessary and appropriate to the circumstances.

@@ -26,7 +26,7 @@
 ## 1. Project Structure
 
 ```
-AIOSCPU-PROTYPE/
+AI-OS-vitural-CPU-OS/
 │
 ├── aos                        # Entry point — run this to boot AIOS
 │
@@ -325,11 +325,11 @@ pkg update && pkg install nodejs
 # 3. Clone this repo (or transfer the folder)
 # Option A — git clone
 pkg install git
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE.git
-cd AIOSCPU-PROTYPE
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS.git
+cd AI-OS-vitural-CPU-OS
 
 # Option B — transfer folder manually via adb / file manager
-# then: cd /path/to/AIOSCPU-PROTYPE
+# then: cd /path/to/AI-OS-vitural-CPU-OS
 
 # 4. Make the entry script executable
 chmod +x aos
@@ -377,7 +377,7 @@ npm start
 | `NEW-ATTEMPT`            | ✅ Referenced | C kernel concepts (scheduler, eventbus) absorbed       |
 | `PROJECT`                | ✅ Referenced | Docs/scripts reviewed; no code ported (doc-only repo)  |
 | `AIOS`                   | ✅ Referenced | Python install scripts reviewed; architecture noted    |
-| `AIOSCPU-PROTYPE`        | ✅ This repo | Final unified codebase lives here                      |
+| `AI-OS-vitural-CPU-OS`        | ✅ This repo | Final unified codebase lives here                      |
 
 ---
 

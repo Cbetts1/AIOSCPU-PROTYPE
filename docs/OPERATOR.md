@@ -42,14 +42,14 @@ It provides:
 ### Termux (Android)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Cbetts1/AIOSCPU-PROTYPE/main/install/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Cbetts1/AI-OS-vitural-CPU-OS/main/install/bootstrap.sh | bash
 ```
 
 Or manually:
 
 ```bash
 pkg install nodejs git
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE ~/aioscpu
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS ~/aioscpu
 cd ~/aioscpu && npm install
 node aos
 ```
@@ -57,13 +57,13 @@ node aos
 ### Desktop (Linux / macOS / WSL)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Cbetts1/AIOSCPU-PROTYPE/main/install/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Cbetts1/AI-OS-vitural-CPU-OS/main/install/bootstrap.sh | bash
 ```
 
 Or:
 
 ```bash
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE ~/.local/share/aioscpu
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS ~/.local/share/aioscpu
 cd ~/.local/share/aioscpu && npm install
 node aos
 ```
