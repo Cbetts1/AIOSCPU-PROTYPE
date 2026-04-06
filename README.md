@@ -1,25 +1,34 @@
-# AIOSCPU Prototype One — AIOS Lite
+# AIOSCPU — AI-Operated Software CPU
 
-> **A fully self-contained, Termux-bootable, offline AI-native operating system.**  
-> Zero external dependencies · Pure Node.js · Runs on Android via Termux
+> **AIOS Lite v2.0.0 — The AI-native OS that runs anywhere Node.js does.**  
+> Zero external dependencies · Pure Node.js · Boots on Android via Termux · Fully offline
+
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](package.json)
+[![Tests](https://img.shields.io/badge/tests-1437%20passing-brightgreen.svg)](tests/)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](README.md)
 
 ---
 
 ## Overview
 
-**AIOSCPU Prototype One** is a complete software-layer operating system that runs
-entirely inside Node.js — no native compilation, no root, no internet connection
-required. It boots from a single script (`./aos`) and includes its own:
+**AIOSCPU** is a complete software-layer operating system that runs entirely
+inside Node.js — no native compilation, no root, no internet connection required.
+It boots from a single script (`./aos`) and includes its own:
 
-| Component | Description |
-|-----------|-------------|
-| 🧠 **AIOSCPU v1.0** | Software-emulated 32-bit CPU with 30+ ISA opcodes |
-| ⚙️  **Kernel** | Event bus, process table, module registry, syscall dispatch |
-| 🗂  **Filesystem** | In-memory POSIX-like VFS (mkdir/ls/cat/write/mv/rm/tree) |
-| 🔀 **Router** | Command dispatcher with hot-swap plug-in modules |
-| 🛠  **Service Manager** | Start/stop/restart named background services |
-| 💻 **Terminal** | Interactive readline REPL with ANSI colours |
-| 🔁 **Self-hosting loop** | CPU `SYSCALL` instruction dispatches into the OS kernel |
+| Component | Version | Description |
+|-----------|---------|-------------|
+| 🧠 **AIOSCPU ISA** | v2.0 | Software-emulated 32-bit CPU with 30+ opcodes, registers, stack, SYSCALL |
+| ⚙️  **Kernel** | v2.0.0 | Event bus, process table, module registry, syscall dispatch, panic/assert |
+| 🗂  **Filesystem** | v1.1.0 | In-memory POSIX-like VFS + atomic writes, snapshots, fsck |
+| 🔀 **Router** | v1.0 | Command dispatcher with hot-swap plug-in modules |
+| 🛠  **Service Manager** | v1.0 | Start/stop/restart named background services |
+| 💻 **Terminal** | v1.0 | Interactive readline REPL with ANSI colours |
+| 🤖 **AIOS Personality** | v2.0 | Always-on AI kernel with phone-first offline LLM support |
+| 🔬 **AURA** | v2.0 | On-demand hardware intelligence layer |
+| 📡 **VHAL** | v1.0 | Virtual hardware bus (VROM, VRAM, VMEM, VDISPLAY, VNET, NPU) |
+| 🪞 **Self-Model** | v1.0 | OS consciousness loop, memory engine, self-awareness |
 
 ---
 
@@ -198,15 +207,35 @@ AIOSCPU-PROTYPE/
 
 ---
 
+## Why AIOSCPU?
+
+AIOSCPU is the only project that combines **all five** of:
+
+1. 🤖 **Custom virtual CPU with AI syscall integration** — AI is not bolted on; it's in the instruction layer
+2. 🏗 **Full OS kernel written from scratch** — no Linux, no POSIX base required
+3. 📱 **First-class Android/Termux deployment** — boots on your phone right now
+4. 📦 **Zero external dependencies** — `node aos` is the entire install
+5. 🧠 **Local LLM personality built into the boot sequence** — offline AI, no cloud
+
+---
+
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
 | [`docs/AIOSCPU-SPEC.md`](docs/AIOSCPU-SPEC.md) | Full CPU / ISA specification |
+| [`docs/API-REFERENCE.md`](docs/API-REFERENCE.md) | Full API reference for all modules |
 | [`docs/DEVELOPER.md`](docs/DEVELOPER.md) | Developer guide — adding commands, services, CPU programs |
-| [`docs/LEGAL.md`](docs/LEGAL.md) | Copyright, IP ownership, and license details |
+| [`docs/OPERATOR.md`](docs/OPERATOR.md) | Operator guide — deployment, config, monitoring |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Troubleshooting guide |
+| [`docs/PRODUCT-BRIEF.md`](docs/PRODUCT-BRIEF.md) | Sales & marketing product brief |
+| [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Market positioning & competitive analysis |
+| [`docs/USER-RIGHTS.md`](docs/USER-RIGHTS.md) | User rights, EULA, data privacy |
+| [`docs/LEGAL.md`](docs/LEGAL.md) | Copyright, IP, trademark, and commercial notes |
+| [`SECURITY.md`](SECURITY.md) | Security policy and vulnerability reporting |
+| [`DISCLAIMER.md`](DISCLAIMER.md) | Warranty disclaimer and liability limitation |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 
 ---
 
@@ -218,11 +247,11 @@ Copyright (c) 2026 Cbetts1. All rights reserved.
 
 Licensed under the **MIT License** — see [`LICENSE`](LICENSE) for full terms.
 
-AIOSCPU, AIOS Lite, and AIOS Prototype One are original creations of Cbetts1.  
-See [`docs/LEGAL.md`](docs/LEGAL.md) and [`NOTICE`](NOTICE) for full IP and
-copyright information.
+"AIOSCPU" and "AIOS Lite" are trademarks of Cbetts1. See [`docs/LEGAL.md`](docs/LEGAL.md)
+and [`NOTICE`](NOTICE) for full IP and copyright information.
 
 ---
 
-*AIOSCPU Prototype One — AIOS Lite v1.0.0*  
+*AIOSCPU — AI-Operated Software CPU · AIOS Lite v2.0.0*  
 *Built and owned by Cbetts1 · https://github.com/Cbetts1*
+

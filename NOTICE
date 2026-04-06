@@ -1,5 +1,5 @@
 ================================================================================
-  AIOSCPU Prototype One — AIOS Lite
+  AIOSCPU — AI-Operated Software CPU · AIOS Lite v2.0.0
   Copyright Notice & Third-Party Attributions
 ================================================================================
 
@@ -13,9 +13,9 @@ See the LICENSE file in the root of this repository for full terms.
 OWNERSHIP
 --------------------------------------------------------------------------------
 
-AIOSCPU Prototype One, including all source code, documentation, architecture
-designs, instruction set specifications, module interfaces, and associated
-materials contained in this repository, is the original intellectual property of:
+AIOSCPU, including all source code, documentation, architecture designs,
+instruction set specifications, module interfaces, and associated materials
+contained in this repository, is the original intellectual property of:
 
     Cbetts1
     GitHub: https://github.com/Cbetts1

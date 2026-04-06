@@ -294,6 +294,7 @@ function createKernel(options = {}) {
     for (const [name, entry] of _healthChecks.entries()) {
       if (entry.interval && !_healthTimers.has(name)) {
         const timer = setInterval(() => runHealthCheck(name), entry.interval);
+        if (typeof timer.unref === 'function') timer.unref();
         _healthTimers.set(name, timer);
       }
     }

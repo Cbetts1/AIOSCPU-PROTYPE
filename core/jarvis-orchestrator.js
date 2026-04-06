@@ -1,6 +1,9 @@
 'use strict';
 /**
- * core/jarvis-orchestrator.js
+ * core/jarvis-orchestrator.js — AIOSCPU v2.0.0
+ *
+ * Copyright (c) 2026 Cbetts1. All rights reserved.
+ * SPDX-License-Identifier: MIT
  *
  * This file forwards to core/aios-aura.js.
  * The AI system is officially AIOS (personality) and AURA (hardware intelligence).

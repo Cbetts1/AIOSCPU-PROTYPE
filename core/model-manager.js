@@ -175,6 +175,7 @@ function createModelManager(kernel, ipc, network) {
       _emit('model:idle', { modelId, idleMs: m.idleTimeoutMs });
     }, model.idleTimeoutMs);
 
+    if (typeof timer.unref === 'function') timer.unref();
     _idleTimers.set(modelId, timer);
   }
 

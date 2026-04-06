@@ -1,7 +1,7 @@
 {
-  "name": "aioscpu-prototype-one",
-  "version": "1.0.0",
-  "description": "AIOSCPU Prototype One – AIOS Lite, Termux-bootable standalone OS",
+  "name": "aioscpu",
+  "version": "2.0.0",
+  "description": "AIOSCPU — AI-Operated Software CPU. A self-contained, Termux-bootable, offline-first AI-native operating system in pure Node.js.",
   "main": "boot/boot.js",
   "scripts": {
     "start": "node aos",
@@ -11,6 +11,26 @@
   "engines": {
     "node": ">=14.0.0"
   },
+  "keywords": [
+    "aios",
+    "aioscpu",
+    "virtual-cpu",
+    "operating-system",
+    "termux",
+    "android",
+    "ai-os",
+    "node-os",
+    "offline-ai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cbetts1/AIOSCPU-PROTYPE.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Cbetts1/AIOSCPU-PROTYPE/issues"
+  },
+  "homepage": "https://github.com/Cbetts1/AIOSCPU-PROTYPE#readme",
+  "author": "Cbetts1 <https://github.com/Cbetts1>",
   "devDependencies": {
     "jest": "^29.7.0"
   }

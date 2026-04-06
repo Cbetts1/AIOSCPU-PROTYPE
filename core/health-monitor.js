@@ -192,6 +192,7 @@ function createHealthMonitor(kernel, network, hostBridge) {
     // Immediate first check, then on interval
     runChecks().catch(() => {});
     _interval = setInterval(() => runChecks().catch(() => {}), ms);
+    if (typeof _interval.unref === 'function') _interval.unref();
     _emit('health:monitor:started', { intervalMs: ms });
   }
 

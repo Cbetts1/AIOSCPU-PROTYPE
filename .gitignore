@@ -1,3 +1,29 @@
 node_modules/
 *.log
 .DS_Store
+
+# Build & coverage output
+dist/
+build/
+coverage/
+.nyc_output/
+
+# Environment files — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Runtime state files
+/tmp/aios-*.json
+*.gguf
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.orig
+
+# OS artefacts
+Thumbs.db
+ehthumbs.db

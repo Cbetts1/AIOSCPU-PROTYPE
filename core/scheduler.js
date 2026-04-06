@@ -92,6 +92,7 @@ function createScheduler(kernel, filesystem, shell) {
     if (type === 'interval') {
       const ms = typeof spec === 'number' ? spec : parseInt(spec, 10);
       job._interval = setInterval(() => _runJob(job), ms);
+      if (typeof job._interval.unref === 'function') job._interval.unref();
       job.nextRun = new Date(Date.now() + ms).toISOString();
     }
 
@@ -179,10 +180,12 @@ function createScheduler(kernel, filesystem, shell) {
     // Align to next minute
     const now   = Date.now();
     const delay = 60000 - (now % 60000);
-    setTimeout(() => {
+    const _startTimer = setTimeout(() => {
       _tick();
       _ticker = setInterval(_tick, 60000);
+      if (typeof _ticker.unref === 'function') _ticker.unref();
     }, delay);
+    if (typeof _startTimer.unref === 'function') _startTimer.unref();
     _log('Scheduler started');
     _emit('scheduler:started', {});
   }
