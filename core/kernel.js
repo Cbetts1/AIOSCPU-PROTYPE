@@ -254,6 +254,8 @@ function createKernel(options = {}) {
 
   function registerHealthCheck(name, fn, interval) {
     if (typeof fn !== 'function') throw new TypeError('health check must be a function');
+    if (interval !== undefined && (typeof interval !== 'number' || interval <= 0))
+      throw new TypeError('interval must be a positive number');
     _healthChecks.set(name, { fn, interval });
     return { name };
   }
