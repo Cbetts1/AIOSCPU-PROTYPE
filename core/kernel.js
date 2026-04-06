@@ -236,74 +236,6 @@ class ModuleRegistry {
 }
 
 // ---------------------------------------------------------------------------
-// ERROR_CODES — 25 named error codes
-// ---------------------------------------------------------------------------
-const ERROR_CODES = Object.freeze({
-  E_OK:              0,
-  E_UNKNOWN:         1,
-  E_INVALID_ARG:     2,
-  E_NOT_FOUND:       4,
-  E_PERMISSION:      5,
-  E_TIMEOUT:         6,
-  E_IO:              7,
-  E_NO_MEM:          8,
-  E_BUSY:            9,
-  E_AGAIN:           10,
-  E_INVAL:           11,
-  E_OVERFLOW:        12,
-  E_UNDERFLOW:       13,
-  E_CORRUPT:         14,
-  E_PANIC:           15,
-  E_SYSCALL:         16,
-  E_MODULE:          17,
-  E_BOOT:            18,
-  E_SHUTDOWN:        19,
-  E_INTEGRITY:       20,
-  E_VHAL:            21,
-  E_NPU:             22,
-  E_REBOOT:          23,
-  E_ASSERT:          24,
-  E_DEPENDENCY:      25,
-});
-
-// ---------------------------------------------------------------------------
-// DependencyGraph — ordered initialisation
-// ---------------------------------------------------------------------------
-class DependencyGraph {
-  constructor() {
-    this._nodes = new Map();   // name → Set of deps
-  }
-
-  add(name, deps = []) {
-    this._nodes.set(name, new Set(deps));
-    return this;
-  }
-
-  // Returns nodes in topological order (throws on cycle)
-  order() {
-    const visited = new Set();
-    const result  = [];
-    const visiting = new Set();
-
-    const visit = (name) => {
-      if (visited.has(name)) return;
-      if (visiting.has(name)) throw new Error(`DependencyGraph: cycle detected at "${name}"`);
-      visiting.add(name);
-      const deps = this._nodes.get(name) || new Set();
-      for (const dep of deps) {
-        if (this._nodes.has(dep)) visit(dep);
-      }
-      visiting.delete(name);
-      visited.add(name);
-      result.push(name);
-    };
-
-    for (const name of this._nodes.keys()) visit(name);
-    return result;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Kernel factory
 // ---------------------------------------------------------------------------
 function createKernel(options = {}) {
@@ -316,18 +248,67 @@ function createKernel(options = {}) {
   const depGraph = new DependencyGraph();
 
   // ── Health-check registry ────────────────────────────────────────────────
-  const _healthChecks = new Map();   // name → fn
+  const _healthChecks = new Map();   // name → { fn, interval }
+  const _healthStatus = new Map();   // name → { lastStatus, lastCheck }
+  const _healthTimers = new Map();   // name → timer
 
-  function registerHealthCheck(name, fn) {
+  function registerHealthCheck(name, fn, interval) {
     if (typeof fn !== 'function') throw new TypeError('health check must be a function');
-    _healthChecks.set(name, fn);
+    _healthChecks.set(name, { fn, interval });
+    return { name };
+  }
+
+  function runHealthCheck(name) {
+    const entry = _healthChecks.get(name);
+    if (!entry) return { ok: false, error: `health check "${name}" not found` };
+    try {
+      const result = entry.fn();
+      _healthStatus.set(name, { lastStatus: result, lastCheck: Date.now() });
+      bus.emit('kernel:health:check', { name, result });
+      return { ok: true, result };
+    } catch (e) {
+      bus.emit('kernel:health:fail', { name, error: e.message });
+      return { ok: false, error: e.message };
+    }
+  }
+
+  function runAllHealthChecks() {
+    const results = [];
+    for (const name of _healthChecks.keys()) {
+      results.push({ name, ...runHealthCheck(name) });
+    }
+    return results;
+  }
+
+  function getHealthStatus() {
+    const status = {};
+    for (const [name, s] of _healthStatus.entries()) {
+      status[name] = s;
+    }
+    return status;
+  }
+
+  function startHealthMonitoring() {
+    for (const [name, entry] of _healthChecks.entries()) {
+      if (entry.interval && !_healthTimers.has(name)) {
+        const timer = setInterval(() => runHealthCheck(name), entry.interval);
+        _healthTimers.set(name, timer);
+      }
+    }
+  }
+
+  function stopHealthMonitoring() {
+    for (const [name, timer] of _healthTimers.entries()) {
+      clearInterval(timer);
+    }
+    _healthTimers.clear();
   }
 
   async function runHealthChecks() {
     const results = {};
-    for (const [name, fn] of _healthChecks.entries()) {
+    for (const [name, entry] of _healthChecks.entries()) {
       try {
-        results[name] = await fn();
+        results[name] = await entry.fn();
       } catch (e) {
         results[name] = { ok: false, error: e.message };
       }
@@ -336,9 +317,11 @@ function createKernel(options = {}) {
   }
 
   // ── Panic / Assert ────────────────────────────────────────────────────────
-  function panic(msg) {
-    bus.emit('kernel:panic', { message: msg, kernelId, time: Date.now() });
-    throw new Error(`KERNEL PANIC: ${msg}`);
+  function panic(msg, code) {
+    bus.emit('kernel:panic', { message: msg, kernelId, time: Date.now(), code });
+    const err = new Error(`KERNEL PANIC: ${msg}`);
+    err.isPanic = true;
+    throw err;
   }
 
   function assert(cond, msg) {
@@ -518,7 +501,12 @@ function createKernel(options = {}) {
     attachVHAL,
     verifyIntegrity,
     registerHealthCheck,
+    runHealthCheck,
+    runAllHealthChecks,
     runHealthChecks,
+    getHealthStatus,
+    startHealthMonitoring,
+    stopHealthMonitoring,
     panic,
     assert,
   };
