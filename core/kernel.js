@@ -27,11 +27,95 @@ const path   = require('path');
 const cp     = require('child_process');
 
 // ---------------------------------------------------------------------------
+// Standardized error codes
+// ---------------------------------------------------------------------------
+const ERROR_CODES = Object.freeze({
+  OK:               0,
+  // General
+  E_UNKNOWN:        1,
+  E_INVALID_ARG:    2,
+  E_NOT_FOUND:      3,
+  E_PERMISSION:     4,
+  E_TIMEOUT:        5,
+  // Kernel
+  E_MODULE_LOAD:    10,
+  E_MODULE_DEP:     11,
+  E_SYSCALL:        12,
+  E_PANIC:          13,
+  // CPU
+  E_CPU_FAULT:      20,
+  E_CPU_BOUNDS:     21,
+  E_CPU_HALT:       22,
+  // Filesystem
+  E_FS_NOT_FOUND:   30,
+  E_FS_NOT_DIR:     31,
+  E_FS_NOT_FILE:    32,
+  E_FS_INTEGRITY:   33,
+  // Services
+  E_SVC_NOT_FOUND:  40,
+  E_SVC_CRASH:      41,
+  E_SVC_TIMEOUT:    42,
+  // AI
+  E_AI_OFFLINE:     50,
+  E_AI_MODEL:       51,
+  E_AI_CONTEXT:     52,
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function uid() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   return crypto.randomBytes(16).toString('hex');
+}
+
+// ---------------------------------------------------------------------------
+// DependencyGraph — tracks module load order and circular deps
+// ---------------------------------------------------------------------------
+class DependencyGraph {
+  constructor() {
+    this._deps = Object.create(null);   // name -> Set of dependency names
+    this._order = [];                   // resolved load order
+  }
+
+  /** Register a module with optional dependencies. */
+  register(name, deps = []) {
+    if (!this._deps[name]) this._deps[name] = new Set();
+    for (const d of deps) this._deps[name].add(d);
+    return this;
+  }
+
+  /** Topological sort — returns load order or throws on cycle. */
+  resolve() {
+    const visited = new Set();
+    const temp    = new Set();
+    const order   = [];
+
+    const visit = (name) => {
+      if (visited.has(name)) return;
+      if (temp.has(name)) throw new Error(`Circular dependency detected: ${name}`);
+      temp.add(name);
+      for (const dep of (this._deps[name] || [])) visit(dep);
+      temp.delete(name);
+      visited.add(name);
+      order.push(name);
+    };
+
+    for (const name of Object.keys(this._deps)) visit(name);
+    this._order = order;
+    return order;
+  }
+
+  /** Returns true when all deps for `name` have been loaded. */
+  canLoad(name, loadedSet) {
+    for (const dep of (this._deps[name] || [])) {
+      if (!loadedSet.has(dep)) return false;
+    }
+    return true;
+  }
+
+  getOrder()  { return this._order.slice(); }
+  getDeps(n)  { return Array.from(this._deps[n] || []); }
 }
 
 // ---------------------------------------------------------------------------
