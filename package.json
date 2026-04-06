@@ -24,12 +24,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Cbetts1/AIOSCPU-PROTYPE.git"
+    "url": "https://github.com/Cbetts1/AI-OS-vitural-CPU-OS.git"
   },
   "bugs": {
-    "url": "https://github.com/Cbetts1/AIOSCPU-PROTYPE/issues"
+    "url": "https://github.com/Cbetts1/AI-OS-vitural-CPU-OS/issues"
   },
-  "homepage": "https://github.com/Cbetts1/AIOSCPU-PROTYPE#readme",
+  "homepage": "https://github.com/Cbetts1/AI-OS-vitural-CPU-OS#readme",
   "author": "Cbetts1 <https://github.com/Cbetts1>",
   "devDependencies": {
     "jest": "^29.7.0"
