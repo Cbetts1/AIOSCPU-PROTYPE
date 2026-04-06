@@ -89,7 +89,7 @@ function createSelfModel(kernel, options) {
 
     const hardware = _vhal ? _vhal.deviceList() : [];
     const modules  = _scanModules();
-    const history  = _memCore ? _memCore.context(20) : [];
+    const history  = _memCore ? (_memCore.getContext ? _memCore.getContext(20) : (_memCore.context ? _memCore.context(20) : [])) : [];
     const stats    = _memCore ? _memCore.getStats()  : {};
 
     const capabilities = _deriveCapabilities(hardware, modules);

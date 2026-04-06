@@ -17,7 +17,7 @@ describe('Kernel', () => {
     test('returns kernel object with expected properties', () => {
       expect(kernel).toBeDefined();
       expect(kernel.id).toMatch(/^aios-kernel-/);
-      expect(kernel.version).toBe('1.0.0');
+      expect(kernel.version).toBe('2.0.0');
       expect(kernel.bus).toBeDefined();
       expect(kernel.modules).toBeDefined();
       expect(kernel.procs).toBeDefined();
@@ -293,7 +293,7 @@ describe('Kernel', () => {
       kernel.bus.on('kernel:booted', handler);
       kernel.boot();
       expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-        version: '1.0.0',
+        version: '2.0.0',
         kernelId: kernel.id,
       }));
     });
