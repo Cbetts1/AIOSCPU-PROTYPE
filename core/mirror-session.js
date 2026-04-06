@@ -259,6 +259,7 @@ function createMirrorSession(kernel, aiosFs, hostBridge) {
     if (!session) return { ok: false, error: `Mirror "${type}" not active` };
     if (session.tickInterval) clearInterval(session.tickInterval);
     session.tickInterval = setInterval(() => sync(type), intervalMs || 60000);
+    if (typeof session.tickInterval.unref === 'function') session.tickInterval.unref();
     return { ok: true };
   }
 

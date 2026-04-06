@@ -5,5 +5,5 @@
 ██║  ██║██║╚██████╔╝███████║╚██████╗██║     ╚██████╔╝
 ╚═╝  ╚═╝╚═╝ ╚═════╝ ╚══════╝ ╚═════╝╚═╝      ╚═════╝
 
-  AI-Operated Software CPU  ·  AIOS Lite  ·  v1.0.0
-  Termux-Bootable · Offline-First · Node.js >= 14
+  AI-Operated Software CPU  ·  AIOS Lite  ·  v2.0.0
+  Termux-Bootable · Offline-First · AI-Native · Node.js >= 14

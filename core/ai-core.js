@@ -624,6 +624,7 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
     _monitorActive = true;
     const ms = intervalMs || 30000;
     _monitorInterval = setInterval(_autonomousCheck, ms);
+    if (typeof _monitorInterval.unref === 'function') _monitorInterval.unref();
 
     // Also watch kernel event bus for real-time reaction
     if (kernel) {

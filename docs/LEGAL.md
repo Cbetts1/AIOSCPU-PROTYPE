@@ -1,7 +1,7 @@
-# Legal Information — AIOSCPU Prototype One
+# Legal Information — AIOSCPU v2.0.0
 
-**Project:** AIOSCPU Prototype One — AIOS Lite  
-**Version:** 1.0.0  
+**Project:** AIOSCPU — AI-Operated Software CPU (AIOS Lite)  
+**Version:** 2.0.0  
 **Owner:** Cbetts1  
 **Repository:** https://github.com/Cbetts1/AIOSCPU-PROTYPE  
 **Date:** 2026
@@ -144,7 +144,42 @@ See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for contribution guidelines.
 
 ---
 
-## 7. Contact
+## 8. Pre-Commercial & Prototype Status
+
+AIOSCPU v2.0.0 is currently a **pre-commercial prototype**. It has not undergone:
+
+- Formal third-party security auditing
+- Regulatory compliance review (GDPR, CCPA, HIPAA, etc.)
+- Certification for safety-critical or production environments
+
+**Before commercializing** this software as part of a paid product or service,
+the owner (Cbetts1) should consider:
+
+1. **Trademark Registration** — File "AIOSCPU" and "AIOS Lite" with the USPTO
+   (Class 9 — Computer Software) and internationally via the Madrid Protocol.
+   Filing fee: approx. $250–$400 per class per jurisdiction.
+
+2. **Commercial License Option** — The MIT license permits all users to
+   redistribute the software freely (including competitors). For commercial
+   exclusivity, consider a **dual-license model**: MIT for open-source/community
+   use; a paid commercial license for embedded/enterprise/OEM use.
+
+3. **Privacy Policy** — If any networked features are enabled (port-server,
+   remote-mesh, Ollama integration), a Privacy Policy may be required by law in
+   the US, EU, and other jurisdictions.
+
+4. **Export Controls** — Software containing cryptographic functions (`crypto`
+   module usage) may be subject to US Export Administration Regulations (EAR).
+   AIOSCPU uses Node.js's built-in `crypto` for hashing only; this is generally
+   exempt, but verify with an attorney before export.
+
+5. **Name Conflict Check** — "AIOS" is used by third-party mobile AI assistants.
+   "AIOSCPU" appears to be distinctive. A trademark attorney search is recommended
+   before registration.
+
+---
+
+## 9. Contact
 
 For licensing inquiries, permissions beyond the scope of the MIT License, or
 IP-related questions, open an issue on the GitHub repository:
@@ -153,5 +188,6 @@ IP-related questions, open an issue on the GitHub repository:
 
 ---
 
-*AIOSCPU Prototype One — AIOS Lite v1.0.0*  
+*AIOSCPU — AI-Operated Software CPU · AIOS Lite v2.0.0*  
 *Copyright (c) 2026 Cbetts1. All rights reserved.*
+
