@@ -3,6 +3,8 @@
 > **AIOS Lite v2.0.0 — The AI-native OS that runs anywhere Node.js does.**  
 > Zero external dependencies · Pure Node.js · Boots on Android via Termux · Fully offline
 
+[![GitHub](https://img.shields.io/badge/GitHub-AI--OS--vitural--CPU--OS-black?logo=github)](https://github.com/Cbetts1/AI-OS-vitural-CPU-OS)
+
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](package.json)
@@ -41,8 +43,8 @@ It boots from a single script (`./aos`) and includes its own:
 pkg update && pkg install nodejs git
 
 # Step 2: Clone the repo
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE.git
-cd AIOSCPU-PROTYPE
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS.git
+cd AI-OS-vitural-CPU-OS
 
 # Step 3: Boot AIOS Lite
 chmod +x aos
@@ -52,8 +54,8 @@ chmod +x aos
 ### On Desktop (Linux / macOS / Windows)
 
 ```bash
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE.git
-cd AIOSCPU-PROTYPE
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS.git
+cd AI-OS-vitural-CPU-OS
 node aos
 ```
 
@@ -174,7 +176,7 @@ Full specification: [`docs/AIOSCPU-SPEC.md`](docs/AIOSCPU-SPEC.md)
 ## Project Structure
 
 ```
-AIOSCPU-PROTYPE/
+AI-OS-vitural-CPU-OS/
 ├── aos                        ← Boot entry point (chmod +x, then ./aos)
 ├── boot/boot.js               ← Full startup orchestrator
 ├── core/
@@ -223,6 +225,7 @@ AIOSCPU is the only project that combines **all five** of:
 
 | Document | Description |
 |----------|-------------|
+| [`MASTER-HANDBOOK.md`](MASTER-HANDBOOK.md) | Complete operator & marketing handbook — start here |
 | [`docs/AIOSCPU-SPEC.md`](docs/AIOSCPU-SPEC.md) | Full CPU / ISA specification |
 | [`docs/API-REFERENCE.md`](docs/API-REFERENCE.md) | Full API reference for all modules |
 | [`docs/DEVELOPER.md`](docs/DEVELOPER.md) | Developer guide — adding commands, services, CPU programs |

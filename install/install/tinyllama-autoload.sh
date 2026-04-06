@@ -2,13 +2,13 @@
 set -e
 
 echo "[AIOS] Creating model directory..."
-mkdir -p AIOSCPU-PROTYPE/usr/lib/aios/models
+mkdir -p AI-OS-vitural-CPU-OS/usr/lib/aios/models
 
 echo "[AIOS] Moving tinyllama.gguf into place..."
-mv tinyllama.gguf AIOSCPU-PROTYPE/usr/lib/aios/models/ 2>/dev/null || true
+mv tinyllama.gguf AI-OS-vitural-CPU-OS/usr/lib/aios/models/ 2>/dev/null || true
 
 echo "[AIOS] Writing model.json..."
-cat > AIOSCPU-PROTYPE/usr/lib/aios/models/model.json << 'EOC'
+cat > AI-OS-vitural-CPU-OS/usr/lib/aios/models/model.json << 'EOC'
 {
   "id": "tinyllama",
   "type": "gguf",
@@ -19,7 +19,7 @@ cat > AIOSCPU-PROTYPE/usr/lib/aios/models/model.json << 'EOC'
 EOC
 
 echo "[AIOS] Patching AI Core for autoload..."
-AI_CORE="AIOSCPU-PROTYPE/core/ai-core.js"
+AI_CORE="AI-OS-vitural-CPU-OS/core/ai-core.js"
 
 if ! grep -q "tinyllama.gguf" "$AI_CORE"; then
 cat >> "$AI_CORE" << 'EOP'

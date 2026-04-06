@@ -43,10 +43,10 @@ const PRODUCT = Object.freeze({
 const LEGAL = Object.freeze({
   owner:        'Cbetts1',
   ownerUrl:     'https://github.com/Cbetts1',
-  repoUrl:      'https://github.com/Cbetts1/AIOSCPU-PROTYPE',
+  repoUrl:      'https://github.com/Cbetts1/AI-OS-vitural-CPU-OS',
   year:         '2026',
   license:      'MIT',
-  licenseUrl:   'https://github.com/Cbetts1/AIOSCPU-PROTYPE/blob/main/LICENSE',
+  licenseUrl:   'https://github.com/Cbetts1/AI-OS-vitural-CPU-OS/blob/main/LICENSE',
 
   // Copyright line — use everywhere
   copyright:    'Copyright (c) 2026 Cbetts1. All rights reserved.',

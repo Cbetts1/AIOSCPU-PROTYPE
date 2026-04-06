@@ -3,7 +3,7 @@
 **Project:** AIOSCPU — AI-Operated Software CPU (AIOS Lite)  
 **Version:** 2.0.0  
 **Owner:** Cbetts1  
-**Repository:** https://github.com/Cbetts1/AIOSCPU-PROTYPE  
+**Repository:** https://github.com/Cbetts1/AI-OS-vitural-CPU-OS  
 **Date:** 2026
 
 ---
@@ -184,7 +184,7 @@ the owner (Cbetts1) should consider:
 For licensing inquiries, permissions beyond the scope of the MIT License, or
 IP-related questions, open an issue on the GitHub repository:
 
-**https://github.com/Cbetts1/AIOSCPU-PROTYPE/issues**
+**https://github.com/Cbetts1/AI-OS-vitural-CPU-OS/issues**
 
 ---
 

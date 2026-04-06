@@ -121,14 +121,14 @@ This release completes all six build phases:
 ### One-shot (auto-detects Termux vs desktop)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Cbetts1/AIOSCPU-PROTYPE/main/install/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Cbetts1/AI-OS-vitural-CPU-OS/main/install/bootstrap.sh | bash
 ```
 
 ### Manual
 
 ```bash
-git clone https://github.com/Cbetts1/AIOSCPU-PROTYPE
-cd AIOSCPU-PROTYPE
+git clone https://github.com/Cbetts1/AI-OS-vitural-CPU-OS
+cd AI-OS-vitural-CPU-OS
 npm install
 node aos
 ```

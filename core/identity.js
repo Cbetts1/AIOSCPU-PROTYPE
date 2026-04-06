@@ -110,7 +110,7 @@ function createIdentity(kernel, fs, hostBridge) {
         `AIOS_ID="${id}"`,
         `AIOS_KERNEL="${KERNEL_NAME}"`,
         `AIOS_FEATURES="${_manifest.capabilities.join(',')}"`,
-        `HOME_URL="https://github.com/Cbetts1/AIOSCPU-PROTYPE"`,
+        `HOME_URL="https://github.com/Cbetts1/AI-OS-vitural-CPU-OS"`,
       ].join('\n') + '\n';
 
       fs.write('/etc/os-release', osRelease);

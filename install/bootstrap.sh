@@ -4,12 +4,12 @@
 # ============================================================
 # Single command to fetch and run the correct installer.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Cbetts1/AIOSCPU-PROTYPE/main/install/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Cbetts1/AI-OS-vitural-CPU-OS/main/install/bootstrap.sh | bash
 #   wget -qO- ...same URL... | bash
 # ============================================================
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/Cbetts1/AIOSCPU-PROTYPE/main/install"
+REPO_RAW="https://raw.githubusercontent.com/Cbetts1/AI-OS-vitural-CPU-OS/main/install"
 TERMUX_SCRIPT="${REPO_RAW}/termux-install.sh"
 DESKTOP_SCRIPT="${REPO_RAW}/desktop-install.sh"
 
