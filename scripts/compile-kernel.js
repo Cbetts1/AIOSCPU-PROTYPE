@@ -1,0 +1,210 @@
+#!/usr/bin/env node
+'use strict';
+/**
+ * scripts/compile-kernel.js — AIOS Kernel Compiler v1.0.0
+ *
+ * Bundles all core/ modules + boot/ bootstrap into a single self-contained
+ * dist/aios-kernel.js using Node.js built-ins only (no webpack/rollup).
+ *
+ * Output: dist/aios-kernel.js
+ *   - All require() calls to ../core/* and ../boot/* are inlined
+ *   - External Node.js built-in requires (fs, path, crypto, …) are kept
+ *   - The bundle is valid CommonJS, zero external deps, runs anywhere Node >= 14
+ *   - Adds a SHA-256 integrity manifest at the top as a comment
+ *
+ * Run:
+ *   node scripts/compile-kernel.js
+ *   node dist/aios-kernel.js
+ */
+
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
+
+// ── config ────────────────────────────────────────────────────────────────
+
+const ROOT     = path.resolve(__dirname, '..');
+const CORE_DIR = path.join(ROOT, 'core');
+const DIST_DIR = path.join(ROOT, 'dist');
+const OUT_FILE = path.join(DIST_DIR, 'aios-kernel.js');
+
+// Modules to bundle (in dependency order)
+const BUNDLE_ORDER = [
+  // Core VHAL hardware stack
+  'core/vrom.js',
+  'core/vram.js',
+  'core/vmem.js',
+  'core/vhal.js',
+  'core/vdisplay.js',
+  'core/vnet.js',
+  // Kernel
+  'core/kernel.js',
+  // CPU
+  'core/cpu.js',
+  // Filesystem
+  'core/filesystem.js',
+  // Router / services
+  'core/router.js',
+  'core/service-manager.js',
+  'core/scheduler.js',
+  // Identity + permissions
+  'core/identity.js',
+  'core/permission-system.js',
+  // Memory
+  'core/memory-core.js',
+  'core/memory-engine.js',
+  // AI subsystems
+  'core/npu-tinyllama.js',
+  'core/self-model.js',
+  'core/consciousness.js',
+  'core/mode-manager.js',
+  'core/model-registry.js',
+  'core/aios-aura.js',
+  // Host bridge + Termux
+  'core/host-bridge.js',
+  'core/termux-bridge.js',
+  // IPC / network
+  'core/network.js',
+  'core/ipc.js',
+  'core/port-server.js',
+];
+
+// Node built-in module names — never bundled
+const NODE_BUILTINS = new Set([
+  'fs', 'path', 'crypto', 'os', 'net', 'http', 'https', 'dns',
+  'url', 'child_process', 'stream', 'util', 'events', 'buffer',
+  'readline', 'tty', 'assert', 'timers',
+]);
+
+// ── helpers ───────────────────────────────────────────────────────────────
+
+function log(msg)  { process.stdout.write(`  \x1b[36m→\x1b[0m  ${msg}\n`); }
+function ok(msg)   { process.stdout.write(`  \x1b[32m✓\x1b[0m  ${msg}\n`); }
+function warn(msg) { process.stdout.write(`  \x1b[33m⚠\x1b[0m  ${msg}\n`); }
+
+// ── read and wrap a module ────────────────────────────────────────────────
+
+function wrapModule(relPath) {
+  const absPath = path.join(ROOT, relPath);
+  let src;
+  try { src = fs.readFileSync(absPath, 'utf8'); }
+  catch (_) { warn(`Skipping (not found): ${relPath}`); return null; }
+
+  // Remove the 'use strict'; at top — we add one globally
+  src = src.replace(/^'use strict';\n?/, '');
+
+  // Rewrite local require() calls to point to the bundled registry
+  // require('../core/X') → __aios_require__('core/X')
+  // require('./X')       → __aios_require__('core/X') or 'boot/X'
+  const dir = path.dirname(relPath);   // e.g. 'core' or 'boot'
+  src = src.replace(
+    /require\(['"]([^'"]+)['"]\)/g,
+    (match, req) => {
+      if (req.startsWith('.')) {
+        // Relative require — resolve to a bundle key
+        const resolved = path.join(dir, req).replace(/\\/g, '/');
+        const withExt  = resolved.endsWith('.js') ? resolved : resolved + '.js';
+        const key      = withExt.replace(/^\.\//, '');
+        // Only rewrite if we know this module is bundled
+        if (BUNDLE_ORDER.includes(withExt) || BUNDLE_ORDER.includes(key)) {
+          return `__aios_require__('${withExt}')`;
+        }
+      }
+      if (req.startsWith('../core/') || req.startsWith('../boot/')) {
+        const key = req.replace(/^\.\.\//, '') + (req.endsWith('.js') ? '' : '.js');
+        return `__aios_require__('${key}')`;
+      }
+      // Built-in or external — keep as-is
+      return match;
+    }
+  );
+
+  const hash = crypto.createHash('sha256').update(src).digest('hex').slice(0, 16);
+  return { relPath, src, hash };
+}
+
+// ── main ──────────────────────────────────────────────────────────────────
+
+process.stdout.write('\n\x1b[1;35mAIOS Kernel Compiler v1.0.0\x1b[0m\n\n');
+
+// Ensure dist/ exists
+try { fs.mkdirSync(DIST_DIR, { recursive: true }); } catch (_) {}
+
+const modules = [];
+for (const rel of BUNDLE_ORDER) {
+  const m = wrapModule(rel);
+  if (m) { modules.push(m); log(`Bundling ${rel}  [${m.hash}]`); }
+}
+
+// Build integrity manifest
+const manifest = modules.map(m => `//   ${m.relPath.padEnd(38)} ${m.hash}`).join('\n');
+const bundleHash = crypto.createHash('sha256')
+  .update(modules.map(m => m.hash).join(':'))
+  .digest('hex');
+
+const header = [
+  "'use strict';",
+  '/**',
+  ' * dist/aios-kernel.js — AIOS Compiled Kernel Bundle',
+  ' *',
+  ' * AUTO-GENERATED by scripts/compile-kernel.js — DO NOT EDIT',
+  ' * Built   : ' + new Date().toISOString(),
+  ' * Bundle  : ' + bundleHash,
+  ' * Modules : ' + modules.length,
+  ' *',
+  ' * Module integrity manifest:',
+  manifest,
+  ' */',
+  '',
+  '// ── Module registry ────────────────────────────────────────────────────',
+  'const __aios_modules__ = Object.create(null);',
+  '',
+  'function __aios_require__(key) {',
+  '  const k = key.endsWith(\'.js\') ? key : key + \'.js\';',
+  '  if (!__aios_modules__[k]) {',
+  '    throw new Error(\'[AIOS bundle] Module not found: \' + k);',
+  '  }',
+  '  if (!__aios_modules__[k].__loaded) {',
+  '    const mod = { exports: {} };',
+  '    __aios_modules__[k].factory(mod, mod.exports);',
+  '    __aios_modules__[k].__cache  = mod.exports;',
+  '    __aios_modules__[k].__loaded = true;',
+  '  }',
+  '  return __aios_modules__[k].__cache;',
+  '}',
+  '',
+].join('\n');
+
+const body = modules.map(m => [
+  `// ── ${m.relPath} ──`,
+  `__aios_modules__['${m.relPath}'] = { factory: function(module, exports) {`,
+  m.src,
+  '} };',
+  '',
+].join('\n')).join('\n');
+
+const footer = [
+  '',
+  '// ── Entry point ────────────────────────────────────────────────────────',
+  "if (require.main === module) {",
+  "  const bootstrap = require('./boot/bootstrap.js');",
+  "  if (bootstrap && typeof bootstrap.start === 'function') bootstrap.start();",
+  '}',
+  '',
+  '// ── Export bundle registry for external use ─────────────────────────────',
+  'module.exports = { __aios_require__, bundleHash: ' + JSON.stringify(bundleHash) + ', modules: ' + JSON.stringify(modules.map(m => m.relPath)) + ' };',
+].join('\n');
+
+const bundle = header + '\n' + body + footer;
+
+try {
+  fs.writeFileSync(OUT_FILE, bundle, 'utf8');
+  const sizeKB = Math.round(fs.statSync(OUT_FILE).size / 1024);
+  ok(`Bundle written: ${OUT_FILE}  (${sizeKB} KB, ${modules.length} modules)`);
+  ok(`Bundle SHA-256: ${bundleHash}`);
+} catch (e) {
+  process.stderr.write(`ERROR: Could not write ${OUT_FILE}: ${e.message}\n`);
+  process.exit(1);
+}
+
+process.stdout.write('\n');

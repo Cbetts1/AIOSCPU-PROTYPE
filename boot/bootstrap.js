@@ -44,6 +44,17 @@
  * Zero external npm dependencies.
  */
 
+// ── VHAL virtual hardware stack ──────────────────────────────────────────────
+const { createVHAL }           = require('../core/vhal.js');
+const { createVROM }           = require('../core/vrom.js');
+const { createVRAM }           = require('../core/vram.js');
+const { createVMEM }           = require('../core/vmem.js');
+const { createVDisplay }       = require('../core/vdisplay.js');
+const { createVNet }           = require('../core/vnet.js');
+const { createNPUTinyLlama }   = require('../core/npu-tinyllama.js');
+const { createSelfModel }      = require('../core/self-model.js');
+const { createTermuxBridge }   = require('../core/termux-bridge.js');
+
 // ── Existing core modules ───────────────────────────────────────────────────
 const { createKernel }          = require('../core/kernel.js');
 const { createCPU }             = require('../core/cpu.js');
@@ -126,6 +137,41 @@ function start() {
   const kernel = createKernel();
   kernel.boot();
   bootMsg('ok', `Kernel  ${kernel.id}  v${kernel.version}`);
+
+  // ── 1.2. VHAL — Virtual Hardware Abstraction Layer ─────────────────────────
+  // Boot order: VROM → VHAL bus → VRAM → VMEM → VDisplay → rest
+  const vrom    = createVROM();
+  const vhal    = createVHAL(kernel);
+  const vram    = createVRAM({}, kernel);
+  const vmem    = createVMEM();
+  const vdisplay= createVDisplay({}, kernel);
+
+  // Register all hardware devices with the VHAL bus
+  vhal.register(vrom.device);
+  vhal.register(vram.device);
+  vhal.register(vmem.device);
+  vhal.register(vdisplay.device);
+
+  // Initialise all registered devices asynchronously (non-blocking)
+  vhal.init().catch(() => {});
+
+  // Attach VHAL to the kernel so IOREAD/IOWRITE syscalls work
+  kernel.attachVHAL(vhal);
+
+  bootMsg('ok', `VHAL  v${vhal.version}  ${vhal.deviceList().length} devices registered  [vrom, vram, vmem, display]`);
+
+  // ── 1.3. TERMUX BRIDGE ─────────────────────────────────────────────────────
+  // Termux is the host OS bridge AND the user interface.
+  // AIOS lives inside Termux and communicates through it.
+  const termuxBridge = createTermuxBridge(kernel);
+  kernel.modules.load('termux-bridge', termuxBridge);
+  if (termuxBridge.isTermux()) {
+    bootMsg('ok', `Termux Bridge  v${termuxBridge.version}  host=Termux/Android  API=${termuxBridge.env.hasAPI ? 'yes' : 'no'}`);
+    bootMsg('info', '  → Run: termux widget  to install home screen shortcut');
+    bootMsg('info', '  → Run: termux boot    to install auto-start on phone boot');
+  } else {
+    bootMsg('ok', `Termux Bridge  v${termuxBridge.version}  host=${process.platform}  (Termux features available when running on Android)`);
+  }
 
   // ── 1.5. MEMORY CORE ───────────────────────────────────────────────────────
   // Created immediately after the kernel so all subsystems can record into it.
@@ -415,6 +461,9 @@ function start() {
   // Host Bridge commands
   router.use('host-bridge', hostBridge);
 
+  // Termux Bridge commands — termux status/widget/boot/battery/notify/…
+  router.use('termux-bridge', termuxBridge);
+
   // Permission system commands
   router.use('permissions', perms);
 
@@ -545,6 +594,53 @@ function start() {
 
   // Wire memoryCore into aiCore now that it's available
   aiCoreFinal.setMemoryCore(memoryCore);
+
+  // ── 22.5. NPU — TinyLlama baked into the kernel ───────────────────────────
+  // TinyLlama is a first-class kernel subsystem (not just an Ollama fallback).
+  // Registers as VHAL device "npu-0"; exposes SYSCALL 30 (NPU_INFER).
+  // Auto-pulls tinyllama if missing; queues requests when Ollama is offline.
+  const npu = createNPUTinyLlama(kernel, { memoryCore });
+  vhal.register(npu.device);
+  npu.init().then(() => {
+    bootMsg('ok', `NPU   TinyLlama  online=${npu.isOnline()}  ready=${npu.isReady()}`);
+  }).catch(() => {});
+  kernel.modules.load('npu-tinyllama', npu);
+  bootMsg('ok', 'NPU   npu-tinyllama  registered  (SYSCALL 30 = NPU_INFER)');
+
+  // ── 22.6. SELF-MODEL — kernel self-awareness layer ────────────────────────
+  // Builds a runtime inventory of modules + hardware + cognitive history.
+  // Emits ai:self:aware on the kernel bus.
+  // Exposes selfModel.ask() for zero-latency introspective answers.
+  const selfModel = createSelfModel(kernel, { vhal, memoryCore });
+  selfModel.build();   // fire-and-forget snapshot at boot
+  kernel.modules.load('self-model', selfModel);
+  router.use('self-model', {
+    commands: {
+      'self-model': (args) => {
+        const q = args.join(' ');
+        if (!q) {
+          const snap = selfModel.build();
+          return {
+            status: 'ok',
+            result: [
+              `Identity   : ${snap.identity.fullName} v${snap.identity.version}`,
+              `Kernel     : ${snap.identity.kernelId}`,
+              `Platform   : ${snap.identity.platform}/${snap.identity.arch}`,
+              `Uptime     : ${snap.uptime}s`,
+              `Hardware   : ${snap.hardware.length} devices`,
+              `Modules    : ${snap.modules.length} loaded`,
+              `Caps       : ${snap.capabilities.join(', ')}`,
+            ].join('\n'),
+          };
+        }
+        const r = selfModel.ask(q);
+        return r.ok
+          ? { status: 'ok',    result: r.answer }
+          : { status: 'info',  result: r.note || 'Not an introspective question' };
+      },
+    },
+  });
+  bootMsg('ok', 'Self-Model  online  — AIOS is now self-aware of its own existence');
 
   // ── 23. AIOS + AURA — Dual-Identity Kernel AI ────────────────────────────
   // 100% local via Ollama.  No tokens.  No cloud.  Phone-first models.
