@@ -15,7 +15,7 @@ const { createAIOSAURA } = require('../core/aios-aura.js');
 function makeKernel() {
   const _h = {};
   return {
-    id: 'test-kernel', version: '1.0.0', uptime: () => 99,
+    id: 'test-kernel', version: '4.0.0', uptime: () => 99,
     bus: {
       on:   (ev, fn) => { _h[ev] = fn; },
       emit: (ev, d)  => { if (_h[ev]) _h[ev](d); },
@@ -133,7 +133,7 @@ describe('module shape', () => {
     expect(typeof ai.commands.aios).toBe('function');
     expect(typeof ai.commands.aura).toBe('function');
     expect(ai.name).toBe('aios-aura');
-    expect(ai.version).toBe('2.0.0');
+    expect(ai.version).toBe('4.0.0');
   });
 
   test('getIdentities returns exactly AIOS and AURA', () => {

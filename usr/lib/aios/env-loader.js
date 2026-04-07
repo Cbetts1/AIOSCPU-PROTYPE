@@ -31,7 +31,7 @@ function createEnvLoader(kernel, vfs, hostBridge, identity) {
   // ── Built-in defaults ────────────────────────────────────────────────────
   const _defaults = {
     AIOS_OS:         'AIOS UniKernel',
-    AIOS_VERSION:    '3.0.0',
+    AIOS_VERSION:    '4.0.0',
     AIOS_KERNEL:     'aios-unikernel',
     AIOS_PIVOTED:    'false',
     HOME:            '/home/user',

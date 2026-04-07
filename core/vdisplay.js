@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/vdisplay.js — AIOS Virtual Display Driver v1.0.0
+ * core/vdisplay.js — AIOS Virtual Display Driver v4.0.0
  *
  * ANSI-based layered framebuffer renderer for the AIOS virtual hardware stack.
  *
@@ -49,7 +49,7 @@ const ANSI = {
 // ---------------------------------------------------------------------------
 function createVDisplay(options, kernel) {
   const opts    = options  || {};
-  const VERSION = '1.0.0';
+  const VERSION = '4.0.0';
 
   const _bus   = (kernel && kernel.bus) ? kernel.bus : { emit: () => {} };
   const _isTTY = !!process.stdout.isTTY;

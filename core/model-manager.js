@@ -460,7 +460,7 @@ function createModelManager(kernel, ipc, network) {
 
   return {
     name:            'model-manager',
-    version:         '1.0.0',
+    version:         '4.0.0',
     AIOS_PORT,
     MODE_ASSIGNMENTS,
     MODEL_TYPES,

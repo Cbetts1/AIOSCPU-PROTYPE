@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/self-model.js — AIOS Self-Awareness Layer v1.0.0
+ * core/self-model.js — AIOS Self-Awareness Layer v4.0.0
  *
  * The kernel's model of its own existence.  On construction it builds a
  * runtime inventory of everything the AIOS system knows about itself:
@@ -49,7 +49,7 @@ const SELF_PATTERNS = [
 // ---------------------------------------------------------------------------
 function createSelfModel(kernel, options) {
   const opts     = options || {};
-  const VERSION  = '1.0.0';
+  const VERSION  = '4.0.0';
   const _bus     = (kernel && kernel.bus) ? kernel.bus : { emit: () => {}, on: () => {} };
   const _vhal    = opts.vhal       || null;
   const _memCore = opts.memoryCore || null;

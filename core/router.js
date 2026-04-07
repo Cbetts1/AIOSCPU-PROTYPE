@@ -1,6 +1,6 @@
 'use strict';
 /**
- * router.js — AIOS Command Router v1.0.0
+ * router.js — AIOS Command Router v4.0.0
  *
  * Adapted from: Cbetts1/Router (router.js) — UMD → CJS, no external deps.
  *
@@ -9,7 +9,7 @@
  * Supports hot-swap module mounting via router.use().
  */
 
-const ROUTER_VERSION = '1.0.0';
+const ROUTER_VERSION = '4.0.0';
 const KNOWN_MODULES  = ['cpu', 'terminal', 'kernel', 'filesystem', 'services', 'ai'];
 
 // ---------------------------------------------------------------------------

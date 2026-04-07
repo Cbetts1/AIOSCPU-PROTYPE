@@ -301,7 +301,7 @@ function createDiagnosticsEngine(kernel, hostBridge, opts) {
 
   return {
     name:    'diagnostics-engine',
-    version: '1.0.0',
+    version: '4.0.0',
     // Health
     captureHealth,
     getHealth,

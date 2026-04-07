@@ -1,6 +1,6 @@
 'use strict';
 /**
- * mirror-session.js — AIOS OS Mirror Manager v2.0.0
+ * mirror-session.js — AIOS Mirror Session v4.0.0
  *
  * Bridges the host OS into AIOS Lite's namespace.
  * Creates named "mirror sessions" that map real host resources into AIOS.
@@ -337,7 +337,7 @@ function createMirrorSession(kernel, aiosFs, hostBridge) {
 
   return {
     name:         'mirror-session',
-    version:      '2.0.0',
+    version:      '4.0.0',
     MIRROR_TYPES,
     mount,
     unmount,

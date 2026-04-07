@@ -21,7 +21,7 @@ describe('MemoryEngine', () => {
     test('returns memory engine with expected API', () => {
       expect(memory).toBeDefined();
       expect(memory.name).toBe('memory-engine');
-      expect(memory.version).toBe('1.0.0');
+      expect(memory.version).toBe('4.0.0');
       expect(typeof memory.store).toBe('function');
       expect(typeof memory.retrieve).toBe('function');
       expect(typeof memory.forget).toBe('function');

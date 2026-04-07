@@ -18,7 +18,7 @@ describe('Router', () => {
       expect(typeof router.unuse).toBe('function');
       expect(typeof router.getCommands).toBe('function');
       expect(typeof router.getModules).toBe('function');
-      expect(router.version).toBe('1.0.0');
+      expect(router.version).toBe('4.0.0');
     });
   });
 
@@ -40,7 +40,7 @@ describe('Router', () => {
     test('version command returns version', async () => {
       const result = await router.handle('version');
       expect(result.status).toBe('ok');
-      expect(result.result).toContain('1.0.0');
+      expect(result.result).toContain('4.0.0');
     });
   });
 

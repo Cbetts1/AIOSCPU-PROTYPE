@@ -55,7 +55,7 @@ function buildBanner(hostBridge, permSystem) {
   return [
     '',
     C.cyan('╔════════════════════════════════════════════════════════════╗'),
-    C.cyan('║') + '  ' + C.bold(C.white('AIOSCPU Prototype One  —  AIOS Lite v2.0.0')) + '            ' + C.cyan('║'),
+    C.cyan('║') + '  ' + C.bold(C.white('AIOSCPU Prototype One  —  AIOS Lite v4.0.0')) + '            ' + C.cyan('║'),
     C.cyan('║') + '  ' + C.dim('Termux-Bootable · Real OS Mirror · AI-Operated · Offline') + '  ' + C.cyan('║'),
     C.cyan('╠════════════════════════════════════════════════════════════╣'),
     C.cyan('║') + '  ' + C.green('Kernel')   + '   │ ' + C.green('CPU')      + '      │ ' + C.green('Router')   + '   │ ' + C.green('Filesystem') + '           ' + C.cyan('║'),
@@ -264,7 +264,7 @@ function createTerminal(router, kernel, filesystem, hostBridge, permSystem) {
   // ---------------------------------------------------------------------------
   const _api = {
     name:      'terminal',
-    version:   '2.0.0',
+    version:   '4.0.0',
 
     start() {
       if (_running) return;
@@ -337,6 +337,20 @@ function createTerminal(router, kernel, filesystem, hostBridge, permSystem) {
 
     history:   () => _history.slice(),
     isRunning: () => _running,
+
+    /** Pause readline input — used by interactive sub-programs like help-window */
+    pause() {
+      if (_rl) _rl.pause();
+    },
+
+    /** Resume readline input after an interactive sub-program exits */
+    resume() {
+      if (_rl && _running) {
+        _rl.resume();
+        _rl.setPrompt(_prompt());
+        _rl.prompt(true);
+      }
+    },
   };
 
   return _api;

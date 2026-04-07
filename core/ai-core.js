@@ -1,6 +1,6 @@
 'use strict';
 /**
- * ai-core.js — AIOS AI Operating Agent v3.0.0
+ * ai-core.js — AIOS AI Core v4.0.0
  *
  * The AI brain of AIOS Lite. Operates the OS, responds to natural language,
  * monitors system health, and can take autonomous corrective action.
@@ -699,7 +699,7 @@ function createAICore(kernel, router, svcMgr, hostBridge, filesystem) {
 
   return {
     name:             'ai-core',
-    version:          '3.0.0',
+    version:          '4.0.0',
     process,
     registerBackend,
     setBackend,

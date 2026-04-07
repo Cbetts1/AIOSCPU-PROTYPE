@@ -1,6 +1,6 @@
 'use strict';
 /**
- * network.js — AIOS Network Module v2.0.0
+ * network.js — AIOS Network v4.0.0
  *
  * Full networking stack for AIOS using Node.js built-in modules only.
  *
@@ -284,7 +284,7 @@ function createNetwork(kernel, filesystem) {
   // ---------------------------------------------------------------------------
   const net_module = {
     name:    'network',
-    version: '2.0.0',
+    version: '4.0.0',
 
     // HTTP convenience methods
     get:    (url, opts)        => _httpRequest('GET',    url, opts || {}),

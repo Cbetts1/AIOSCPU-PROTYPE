@@ -383,7 +383,7 @@ function createModelRegistry(kernel, hostBridge, envLoader) {
 
   return {
     name:            'model-registry',
-    version:         '1.0.0',
+    version:         '4.0.0',
     register,
     assignMode,
     validate,

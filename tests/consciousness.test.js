@@ -31,7 +31,7 @@ describe('Consciousness', () => {
     test('returns object with expected API', () => {
       expect(consciousness).toBeDefined();
       expect(consciousness.name).toBe('consciousness');
-      expect(consciousness.version).toBe('1.0.0');
+      expect(consciousness.version).toBe('4.0.0');
       expect(typeof consciousness.query).toBe('function');
       expect(typeof consciousness.learn).toBe('function');
       expect(typeof consciousness.getContext).toBe('function');

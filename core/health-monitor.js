@@ -277,7 +277,7 @@ function createHealthMonitor(kernel, network, hostBridge) {
 
   return {
     name:               'health-monitor',
-    version:            '1.0.0',
+    version:            '4.0.0',
     registerEndpoint,
     unregisterEndpoint,
     registerPort,

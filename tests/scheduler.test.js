@@ -27,7 +27,7 @@ describe('Scheduler', () => {
   describe('createScheduler', () => {
     test('returns scheduler with expected API', () => {
       expect(scheduler.name).toBe('scheduler');
-      expect(scheduler.version).toBe('2.0.0');
+      expect(scheduler.version).toBe('4.0.0');
       expect(typeof scheduler.addJob).toBe('function');
       expect(typeof scheduler.removeJob).toBe('function');
       expect(typeof scheduler.listJobs).toBe('function');

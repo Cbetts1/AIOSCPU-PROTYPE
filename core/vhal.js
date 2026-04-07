@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/vhal.js — AIOS Virtual Hardware Abstraction Layer v1.0.0
+ * core/vhal.js — AIOS Virtual Hardware Abstraction Layer v4.0.0
  *
  * The plug-and-play device bus for the AIOS virtual hardware stack.
  * Every virtual hardware component registers here with a standard interface:
@@ -218,7 +218,7 @@ function createVHAL(kernel) {
 
   return {
     name:          'vhal',
-    version:       '1.0.0',
+    version:       '4.0.0',
     HAL_DEVICE,
     register,
     unregister,

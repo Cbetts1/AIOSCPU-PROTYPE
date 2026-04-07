@@ -1,6 +1,6 @@
 'use strict';
 /**
- * env-loader.js — AIOS Environment Loader v1.0.0
+ * env-loader.js — AIOS Environment Loader v4.0.0
  *
  * Builds and manages the AIOS shell environment.
  * Loads from:
@@ -24,7 +24,7 @@ function createEnvLoader(kernel, fs, hostBridge, identity) {
 
   const _defaults = {
     AIOS_OS:      'AIOS UniKernel',
-    AIOS_VERSION: '3.0.0',
+    AIOS_VERSION: '4.0.0',
     AIOS_KERNEL:  'aios-unikernel',
     HOME:         '/home/user',
     USER:         'aios',

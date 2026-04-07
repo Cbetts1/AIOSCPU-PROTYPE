@@ -673,7 +673,7 @@ function createModelScanner(kernel, filesystem, network, hostBridge) {
 
   return {
     name:            'model-scanner',
-    version:         '1.0.0',
+    version:         '4.0.0',
     scan,
     scanLocal,
     scanHostLocal,

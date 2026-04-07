@@ -1,6 +1,6 @@
 'use strict';
 /**
- * bootstrap.js — AIOS OS Integration Layer Bootstrap v1.0.0
+ * bootstrap.js — AIOS OS Integration Layer Bootstrap v4.0.0
  *
  * The top-level entry point for the AIOS OS Integration Layer.
  * Called by ./aos  (replaces the direct call to boot/boot.js).
@@ -92,6 +92,9 @@ const { createEnvLoader }       = require('../usr/lib/aios/env-loader.js');
 // ── Terminal ─────────────────────────────────────────────────────────────────
 const { createTerminal }        = require('../terminal/terminal.js');
 
+// ── Help Window ──────────────────────────────────────────────────────────────
+const { createHelpWindow }      = require('../core/help-window.js');
+
 // ── Self-kernel + loop engine (wraps existing; does not replace) ─────────────
 const selfKernelBoot  = require('../usr/lib/aios/self-kernel/boot.js');
 const selfKernelSvcs  = require('../usr/lib/aios/self-kernel/services.js');
@@ -125,7 +128,7 @@ function start() {
   process.stdout.write([
     '',
     '\x1b[36m  ╔══════════════════════════════════════════════════════╗\x1b[0m',
-    '\x1b[36m  ║\x1b[0m   \x1b[1mAIOS UniKernel v3.0.0\x1b[0m  — OS Integration Layer       \x1b[36m║\x1b[0m',
+    '\x1b[36m  ║\x1b[0m   \x1b[1mAIOS UniKernel v4.0.0\x1b[0m  — OS Integration Layer       \x1b[36m║\x1b[0m',
     '\x1b[36m  ║\x1b[0m   AI Operating System  |  Dual Hardware+Personality   \x1b[36m║\x1b[0m',
     '\x1b[36m  ╚══════════════════════════════════════════════════════╝\x1b[0m',
     '',
@@ -193,11 +196,11 @@ function start() {
   bootMsg('ok', `Collective Intelligence v${collectiveIntelligence.version}  shared brain online`);
 
   // ── 3. ROOTFS ──────────────────────────────────────────────────────────────
-  const rootfsResult = buildRootFS(vfs, { hostname: 'aioscpu', version: '3.0.0' });
+  const rootfsResult = buildRootFS(vfs, { hostname: 'aioscpu', version: '4.0.0' });
   bootMsg('ok', `RootFS  built — ${rootfsResult.dirs.length} dirs, ${rootfsResult.files.length} files`);
 
   // ── 4. PIVOT ───────────────────────────────────────────────────────────────
-  const pivotCtx = pivot(vfs, { rootfs: '/', version: '3.0.0' });
+  const pivotCtx = pivot(vfs, { rootfs: '/', version: '4.0.0' });
   bootMsg('ok', `Pivot   environment detached from host — AIOS owns its context`);
   vfs.append('/var/log/boot.log', `[${ts()}] Pivot complete: ${pivotCtx.platform}\n`);
 
@@ -216,7 +219,7 @@ function start() {
   })();
   const bootCount = existingId ? (existingId.bootCount || 0) + 1 : 1;
 
-  const fullId = Object.assign({}, idManifest, { bootCount, version: '3.0.0' });
+  const fullId = Object.assign({}, idManifest, { bootCount, version: '4.0.0' });
   vfs.write('/etc/aios/identity.json', JSON.stringify(fullId, null, 2) + '\n');
   vfs.write('/etc/kernel/identity.json', JSON.stringify(fullId, null, 2) + '\n');
 
@@ -299,7 +302,7 @@ function start() {
     commands: {
       uname: () => ({
         status: 'ok',
-        result: `AIOS UniKernel 3.0.0 AIOSCPU-Prototype-One node/${process.versions.node} ${process.platform}`,
+        result: `AIOS UniKernel 4.0.0 AIOSCPU-Prototype-One node/${process.versions.node} ${process.platform}`,
       }),
       uptime: () => ({
         status: 'ok',
@@ -360,6 +363,42 @@ function start() {
       hostname: () => {
         const r = vfs.read('/etc/hostname');
         return { status: 'ok', result: r.ok ? r.content.trim() : 'aioscpu' };
+      },
+      units: (args) => {
+        const [rawVal, from, to] = args;
+        if (!rawVal || !from || !to) {
+          return { status: 'error', result: 'Usage: units <value> <from> <to>  e.g. units 1024 B KB' };
+        }
+        const val   = parseFloat(rawVal);
+        if (isNaN(val)) return { status: 'error', result: `Invalid value: ${rawVal}` };
+        const BYTES = { b:1, kb:1024, mb:1024**2, gb:1024**3, tb:1024**4 };
+        const TIME  = { ms:1, s:1000, m:60000, h:3600000 };
+        const f = from.toLowerCase(); const t = to.toLowerCase();
+        if (BYTES[f] !== undefined && BYTES[t] !== undefined) {
+          return { status:'ok', result:`${val} ${from} = ${(val * BYTES[f] / BYTES[t]).toFixed(4)} ${to}` };
+        }
+        if (TIME[f] !== undefined && TIME[t] !== undefined) {
+          return { status:'ok', result:`${val} ${from} = ${(val * TIME[f] / TIME[t]).toFixed(4)} ${to}` };
+        }
+        return { status:'error', result:`Unsupported unit conversion: ${from} → ${to}. Supported: B/KB/MB/GB/TB  ms/s/m/h` };
+      },
+      vps: (args) => {
+        const sub = (args[0] || 'list').toLowerCase();
+        if (sub === 'list' || !sub) {
+          const procs = processModel.list();
+          if (!procs.length) return { status: 'ok', result: 'No virtual processes.' };
+          const out = procs.map(p => `  vPID ${String(p.vPid).padEnd(6)} ${p.name.padEnd(24)} ${p.state}`).join('\n');
+          return { status: 'ok', result: `Virtual Processes:\n${out}` };
+        }
+        if (sub === 'spawn' && args[1]) {
+          const r = processModel.spawn(args[1]);
+          return r.ok ? { status:'ok', result:`Spawned ${args[1]} vPID=${r.vPid}` } : { status:'error', result: r.error };
+        }
+        if (sub === 'kill' && args[1]) {
+          const r = processModel.kill(parseInt(args[1], 10));
+          return r.ok ? { status:'ok', result:`Killed vPID ${args[1]}` } : { status:'error', result: r.error };
+        }
+        return { status:'error', result:'Usage: vps [list|spawn <name>|kill <vpid>]' };
       },
     },
   });
@@ -655,7 +694,7 @@ function start() {
   aiosAura.registerServices();
   kernel.modules.load('aios-aura', aiosAura);
   router.use('aios-aura', aiosAura);
-  bootMsg('ok', 'AIOS + AURA  v2.0.0  online  (kernel AI — 100% local via Ollama)');
+  bootMsg('ok', 'AIOS + AURA  v4.0.0  online  (kernel AI — 100% local via Ollama)');
   bootMsg('info', '  → `aios help` for capabilities.  `ollama serve` to activate AI.');
 
   // ── 23b. AI MESH — 7 open-source models wired as one brain ───────────────
@@ -1041,6 +1080,15 @@ function start() {
     });
 
     bootMsg('ok', 'Loop engine + self-kernel bridges attached\n');
+
+    // ── HELP WINDOW ───────────────────────────────────────────────────────
+    const helpWindow = createHelpWindow();
+    kernel.modules.load('help-window', helpWindow);
+    // Override the router built-in help with the full TUI help window.
+    // The terminal context is passed so the help window can pause/resume I/O.
+    try { router.unregisterCommand('help'); } catch (_) {}
+    router.registerCommand('help', (args, context) => helpWindow.commands.help(args, context));
+    bootMsg('ok', `Help Window    v${helpWindow.version}  online  (type: help)`);
 
     vfs.append('/var/log/boot.log', `[${ts()}] Terminal started\n`);
     terminal.start();

@@ -25,7 +25,7 @@ describe('VDisplay', () => {
   describe('createVDisplay', () => {
     test('returns vdisplay object with expected API', () => {
       expect(vdisplay.name).toBe('vdisplay');
-      expect(vdisplay.version).toBe('1.0.0');
+      expect(vdisplay.version).toBe('4.0.0');
       expect(typeof vdisplay.print).toBe('function');
       expect(typeof vdisplay.render).toBe('function');
       expect(typeof vdisplay.clear).toBe('function');

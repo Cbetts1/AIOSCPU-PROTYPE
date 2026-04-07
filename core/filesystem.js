@@ -1,6 +1,6 @@
 'use strict';
 /**
- * filesystem.js — AIOS In-Memory Virtual Filesystem v1.1.0
+ * filesystem.js — AIOS In-Memory Virtual Filesystem v4.0.0
  *
  * Created for: AIOSCPU Prototype One
  * Sources drawn from: Cbetts1/Files-system, Cbetts1/Backend-file-system-

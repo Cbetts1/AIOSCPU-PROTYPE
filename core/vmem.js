@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/vmem.js — AIOS Virtual Memory Controller v1.0.0
+ * core/vmem.js — AIOS Virtual Memory Controller v4.0.0
  *
  * Maps VROM + VRAM + kernel heap into one unified 64-bit virtual address
  * space and provides virtual-to-physical (V→P) address translation.
@@ -41,7 +41,7 @@ const REGION_SIZE = Object.freeze({
 // ---------------------------------------------------------------------------
 function createVMEM(options) {
   const _opts   = options || {};
-  const VERSION = '1.0.0';
+  const VERSION = '4.0.0';
 
   // Page table: vpn (virtual page number) → { region, offset }
   const _pageTable = new Map();

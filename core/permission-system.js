@@ -1,6 +1,6 @@
 'use strict';
 /**
- * permission-system.js — AIOS Capability & Privilege Layer v2.0.0
+ * permission-system.js — AIOS Permission System v4.0.0
  *
  * Implements a tiered privilege system inside AIOS Lite.
  * Works on any device — real root is optional.
@@ -266,7 +266,7 @@ function createPermissionSystem(kernel, hostBridge) {
 
   return {
     name:     'permission-system',
-    version:  '2.0.0',
+    version:  '4.0.0',
     LEVELS,
     CAPS,
     has,

@@ -11,7 +11,7 @@ describe('VMEM', () => {
   describe('createVMEM', () => {
     test('returns vmem object with expected API', () => {
       expect(vmem.name).toBe('vmem');
-      expect(vmem.version).toBe('1.0.0');
+      expect(vmem.version).toBe('4.0.0');
       expect(typeof vmem.map).toBe('function');
       expect(typeof vmem.unmap).toBe('function');
       expect(typeof vmem.translate).toBe('function');

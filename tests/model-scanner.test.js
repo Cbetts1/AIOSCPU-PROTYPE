@@ -77,7 +77,7 @@ describe('createModelScanner', () => {
     const scanner = createModelScanner(null, null, null, null);
     expect(scanner).toBeDefined();
     expect(scanner.name).toBe('model-scanner');
-    expect(scanner.version).toBe('1.0.0');
+    expect(scanner.version).toBe('4.0.0');
     expect(typeof scanner.scan).toBe('function');
     expect(typeof scanner.scanLocal).toBe('function');
     expect(typeof scanner.scanHostLocal).toBe('function');

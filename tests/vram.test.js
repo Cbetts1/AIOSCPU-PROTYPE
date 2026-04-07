@@ -25,7 +25,7 @@ describe('VRAM', () => {
   describe('createVRAM', () => {
     test('returns vram object with expected API', () => {
       expect(vram.name).toBe('vram');
-      expect(vram.version).toBe('1.0.0');
+      expect(vram.version).toBe('4.0.0');
       expect(typeof vram.allocate).toBe('function');
       expect(typeof vram.free).toBe('function');
       expect(typeof vram.info).toBe('function');

@@ -19,7 +19,7 @@ describe('AIOSCPU Virtual Processor', () => {
   describe('createCPU', () => {
     test('returns cpu module with expected properties', () => {
       expect(cpu.name).toBe('AIOSCPU');
-      expect(cpu.version).toBe('1.1.0');
+      expect(cpu.version).toBe('4.0.0');
       expect(cpu.OP).toBeDefined();
       expect(typeof cpu.loadProgram).toBe('function');
       expect(typeof cpu.step).toBe('function');
@@ -557,7 +557,7 @@ describe('AIOSCPU Virtual Processor', () => {
       const handler = jest.fn();
       kernel.bus.on('cpu:ready', handler);
       createCPU(kernel);
-      expect(handler).toHaveBeenCalledWith({ version: '1.1.0' });
+      expect(handler).toHaveBeenCalledWith({ version: '4.0.0' });
     });
   });
 });

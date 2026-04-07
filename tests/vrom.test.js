@@ -11,7 +11,7 @@ describe('VROM', () => {
   describe('createVROM', () => {
     test('returns vrom object with expected API', () => {
       expect(vrom.name).toBe('vrom');
-      expect(vrom.version).toBe('1.0.0');
+      expect(vrom.version).toBe('4.0.0');
       expect(typeof vrom.write).toBe('function');
       expect(typeof vrom.read).toBe('function');
       expect(typeof vrom.seal).toBe('function');

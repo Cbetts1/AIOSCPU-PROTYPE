@@ -25,7 +25,7 @@ describe('EnvLoader', () => {
     test('loads default environment', () => {
       const result = env.load();
       expect(result.AIOS_OS).toBe('AIOS UniKernel');
-      expect(result.AIOS_VERSION).toBe('3.0.0');
+      expect(result.AIOS_VERSION).toBe('4.0.0');
       expect(result.HOME).toBe('/home/user');
       expect(result.USER).toBe('aios');
       expect(result.SHELL).toBe('/bin/aios-shell');

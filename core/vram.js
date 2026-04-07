@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/vram.js — AIOS Virtual RAM Manager v1.0.0
+ * core/vram.js — AIOS Virtual RAM Manager v4.0.0
  *
  * Manages banked virtual memory for the AIOS virtual hardware stack.
  * Provides allocation, deallocation, bank switching, and memory-pressure
@@ -29,7 +29,7 @@ const PAGE_SIZE_MB    = PAGE_SIZE_BYTES / (1024 * 1024);
 // ---------------------------------------------------------------------------
 function createVRAM(options, kernel) {
   const opts    = options || {};
-  const VERSION = '1.0.0';
+  const VERSION = '4.0.0';
 
   const totalMB          = opts.totalMB          || 256;
   const pressureThreshold = opts.pressureThreshold || 0.80;   // 80 %

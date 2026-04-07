@@ -1,6 +1,6 @@
 'use strict';
 /**
- * host-bridge.js — AIOS Host Bridge / Real OS Mirror v2.0.0
+ * host-bridge.js — AIOS Host Bridge v4.0.0
  *
  * Provides a live bridge between AIOS Lite and the real host operating system.
  * Works on: Termux (Android), Linux, macOS, WSL.
@@ -483,7 +483,7 @@ function createHostBridge(kernel) {
 
   return {
     name:        'host-bridge',
-    version:     '2.0.0',
+    version:     '4.0.0',
     platform,
     root:        rootInfo,
     termux,

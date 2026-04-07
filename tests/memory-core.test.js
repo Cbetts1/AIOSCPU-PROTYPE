@@ -32,7 +32,7 @@ describe('MemoryCore', () => {
     test('returns memory core object with expected properties', () => {
       expect(mem).toBeDefined();
       expect(mem.name).toBe('memory-core');
-      expect(mem.version).toBe('1.0.0');
+      expect(mem.version).toBe('4.0.0');
       expect(typeof mem.record).toBe('function');
       expect(typeof mem.recall).toBe('function');
       expect(typeof mem.getContext).toBe('function');

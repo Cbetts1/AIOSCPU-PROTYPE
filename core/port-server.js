@@ -1,6 +1,6 @@
 'use strict';
 /**
- * port-server.js — AIOS Port Server v1.0.0
+ * port-server.js — AIOS Port Server v4.0.0
  *
  * A single HTTP port server that exposes AIOS functionality over the network.
  *
@@ -77,7 +77,7 @@ function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
       if (method === 'GET' && (url === '/' || url === '')) {
         return _json(res, 200, {
           system:  'AIOS',
-          version: '1.0.0',
+          version: '4.0.0',
           port:    _port,
           uptime:  kernel ? kernel.uptime() : 0,
           endpoints: ['GET /', 'GET /status', 'GET /report', 'GET /models', 'POST /ai', 'POST /command'],
@@ -220,7 +220,7 @@ function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
   function info() {
     return {
       port:    _port,
-      version: '1.0.0',
+      version: '4.0.0',
       started: _started,
     };
   }
@@ -253,7 +253,7 @@ function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
         return {
           status: 'ok',
           result: [
-            `Port Server v1.0.0`,
+            `Port Server v4.0.0`,
             `Status   : ${s.started ? 'running' : 'stopped'}`,
             `Port     : ${s.port}`,
             `Requests : ${s.requests}`,
@@ -284,7 +284,7 @@ function createPortServer(kernel, router, consciousness, diagnosticsEngine) {
 
   return {
     name:     'port-server',
-    version:  '1.0.0',
+    version:  '4.0.0',
     start,
     stop,
     status,

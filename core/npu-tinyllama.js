@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/npu-tinyllama.js — AIOS TinyLlama Neural Processing Unit Driver v1.0.0
+ * core/npu-tinyllama.js — AIOS TinyLlama Neural Processing Unit Driver v4.0.0
  *
  * Makes TinyLlama a first-class kernel subsystem rather than an external
  * Ollama fallback.  Registers itself with VHAL as a device of type "npu"
@@ -84,7 +84,7 @@ function _httpGet(path) {
 // ---------------------------------------------------------------------------
 function createNPUTinyLlama(kernel, options) {
   const opts      = options || {};
-  const VERSION   = '1.0.0';
+  const VERSION   = '4.0.0';
   const _bus      = (kernel && kernel.bus) ? kernel.bus : { emit: () => {}, on: () => {} };
   const _memCore  = opts.memoryCore || null;
 

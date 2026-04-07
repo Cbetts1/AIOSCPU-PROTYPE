@@ -1,12 +1,12 @@
 'use strict';
 /**
- * kernel.js — AIOS Software Kernel v2.0.0
+ * kernel.js — AIOS Software Kernel v4.0.0
  *
  * Merged & adapted from: Cbetts1/Kernal-  (kernel.js)
  *                         Cbetts1/Os-layer (os.js)
  *                         Cbetts1/Os-handshake (interOS.js)
  *
- * v2.0.0 additions:
+ * v4.0.0 additions:
  *   - Self-integrity check: SHA-256 of own source pinned in VROM on boot;
  *     re-verified on demand via kernel.verifyIntegrity()
  *   - VHAL integration: kernel.attachVHAL(vhal) merges device registry;
@@ -239,7 +239,7 @@ class ModuleRegistry {
 // Kernel factory
 // ---------------------------------------------------------------------------
 function createKernel(options = {}) {
-  const KERNEL_VERSION = '2.0.0';
+  const KERNEL_VERSION = '4.0.0';
   const kernelId = `aios-kernel-${uid().slice(0, 8)}`;
 
   const bus     = new KernelEventBus();

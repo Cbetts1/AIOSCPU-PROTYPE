@@ -1,6 +1,6 @@
 'use strict';
 /**
- * scheduler.js — AIOS Task Scheduler v2.0.0
+ * scheduler.js — AIOS Scheduler v4.0.0
  *
  * Cron-style and interval task scheduler built into AIOS.
  * Jobs are stored in /etc/cron/ in the AIOS VFS for persistence.
@@ -308,7 +308,7 @@ function createScheduler(kernel, filesystem, shell) {
 
   return {
     name:       'scheduler',
-    version:    '2.0.0',
+    version:    '4.0.0',
     addJob,
     removeJob,
     enableJob,
