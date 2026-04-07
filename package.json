@@ -2,10 +2,10 @@
   "name": "aioscpu",
   "version": "4.0.0",
   "description": "AIOSCPU — AI-Operated Software CPU. A self-contained, Termux-bootable, offline-first AI-native operating system in pure Node.js.",
-  "main": "boot/boot.js",
+  "main": "boot/bootstrap.js",
   "scripts": {
     "start": "node aos",
-    "test": "jest --verbose"
+    "test": "jest --verbose --forceExit"
   },
   "license": "MIT",
   "engines": {
