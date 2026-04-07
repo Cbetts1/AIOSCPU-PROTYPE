@@ -54,7 +54,7 @@ class PivotContext {
  * @returns {PivotContext}
  */
 function pivot(vfs, opts = {}) {
-  const rootfs   = opts.rootfs  || '/';
+  const rootfs   = opts.rootfs   || '/';
   const version  = opts.version  || '4.0.0';
   const platform = process.platform;
 
