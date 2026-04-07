@@ -1,6 +1,6 @@
 'use strict';
 /**
- * service-manager.js — AIOS Service Manager v1.0.0
+ * service-manager.js — AIOS Service Manager v4.0.0
  *
  * Created for: AIOSCPU Prototype One
  * Manages named background services with lifecycle hooks: start, stop, status.

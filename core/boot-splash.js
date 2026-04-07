@@ -165,7 +165,7 @@ function createBootSplash(options = {}) {
 
   return {
     name:       'boot-splash',
-    version:    '1.0.0',
+    version:    '4.0.0',
     render,
     show,
     complete,

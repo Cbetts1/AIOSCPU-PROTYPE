@@ -43,7 +43,7 @@ describe('VHAL', () => {
     test('returns vhal object with expected API', () => {
       expect(vhal).toBeDefined();
       expect(vhal.name).toBe('vhal');
-      expect(vhal.version).toBe('1.0.0');
+      expect(vhal.version).toBe('4.0.0');
       expect(typeof vhal.register).toBe('function');
       expect(typeof vhal.unregister).toBe('function');
       expect(typeof vhal.init).toBe('function');

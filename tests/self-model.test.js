@@ -7,7 +7,7 @@ function makeKernel() {
   const _events = [];
   return {
     id:      'aios-kernel-test01',
-    version: '2.0.0',
+    version: '4.0.0',
     uptime:  () => 42,
     bus: {
       on:   () => {},
@@ -49,7 +49,7 @@ describe('SelfModel', () => {
   describe('createSelfModel', () => {
     test('returns self-model object with expected API', () => {
       expect(selfModel.name).toBe('self-model');
-      expect(selfModel.version).toBe('1.0.0');
+      expect(selfModel.version).toBe('4.0.0');
       expect(typeof selfModel.build).toBe('function');
       expect(typeof selfModel.ask).toBe('function');
       expect(Array.isArray(selfModel.SELF_PATTERNS)).toBe(true);
@@ -69,7 +69,7 @@ describe('SelfModel', () => {
 
     test('identity includes kernel version', () => {
       const snap = selfModel.build();
-      expect(snap.identity.version).toBe('2.0.0');
+      expect(snap.identity.version).toBe('4.0.0');
       expect(snap.identity.kernelId).toBe('aios-kernel-test01');
     });
 
@@ -192,7 +192,7 @@ describe('SelfModel', () => {
     });
 
     test('ask works with minimal kernel stub', () => {
-      const m = createSelfModel({ id: 'x', version: '2.0.0', uptime: () => 0, bus: { emit: () => {}, on: () => {} } }, {});
+      const m = createSelfModel({ id: 'x', version: '4.0.0', uptime: () => 0, bus: { emit: () => {}, on: () => {} } }, {});
       expect(() => m.ask('what are you?')).not.toThrow();
     });
   });

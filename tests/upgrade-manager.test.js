@@ -13,7 +13,7 @@ function makeKernel() {
   const _h = {};
   const _m = {};
   return {
-    id: 'test-kernel', version: '1.0.0', uptime: () => 42,
+    id: 'test-kernel', version: '4.0.0', uptime: () => 42,
     bus: {
       on:   (ev, fn) => { _h[ev] = fn; },
       emit: (ev, d)  => { if (_h[ev]) _h[ev](d); },
@@ -108,7 +108,7 @@ describe('module shape', () => {
   test('factory returns object with expected API', () => {
     const mgr = make();
     expect(mgr.name).toBe('upgrade-manager');
-    expect(mgr.version).toBe('1.0.0');
+    expect(mgr.version).toBe('4.0.0');
     expect(typeof mgr.pullModel).toBe('function');
     expect(typeof mgr.removeModel).toBe('function');
     expect(typeof mgr.checkUpgrades).toBe('function');

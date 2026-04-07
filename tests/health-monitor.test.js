@@ -21,7 +21,7 @@ describe('HealthMonitor', () => {
   describe('createHealthMonitor', () => {
     test('returns monitor with expected API', () => {
       expect(monitor.name).toBe('health-monitor');
-      expect(monitor.version).toBe('1.0.0');
+      expect(monitor.version).toBe('4.0.0');
       expect(typeof monitor.registerEndpoint).toBe('function');
       expect(typeof monitor.unregisterEndpoint).toBe('function');
       expect(typeof monitor.registerPort).toBe('function');

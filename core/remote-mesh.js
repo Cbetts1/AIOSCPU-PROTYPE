@@ -54,7 +54,7 @@
  * Zero external npm dependencies.
  */
 
-const VERSION = '1.0.0';
+const VERSION = '4.0.0';
 
 // ---------------------------------------------------------------------------
 // Agent definitions — order matters for routing (most-specific first)

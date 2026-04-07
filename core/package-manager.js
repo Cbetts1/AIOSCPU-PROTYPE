@@ -364,7 +364,7 @@ function createPackageManager(kernel, filesystem, router, svcMgr, shell) {
 
   return {
     name:    'package-manager',
-    version: '2.0.0',
+    version: '4.0.0',
     install,
     remove,
     upgrade,

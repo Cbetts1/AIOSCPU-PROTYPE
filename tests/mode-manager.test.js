@@ -21,7 +21,7 @@ describe('ModeManager', () => {
     test('returns object with expected API', () => {
       expect(mgr).toBeDefined();
       expect(mgr.name).toBe('mode-manager');
-      expect(mgr.version).toBe('1.0.0');
+      expect(mgr.version).toBe('4.0.0');
       expect(typeof mgr.setMode).toBe('function');
       expect(typeof mgr.getMode).toBe('function');
       expect(typeof mgr.getModeConfig).toBe('function');

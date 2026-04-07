@@ -18,9 +18,9 @@ function makeKernel() {
 
 // ── Version ───────────────────────────────────────────────────────────────────
 describe('CPU version', () => {
-  test('version is 1.1.0', () => {
+  test('version is 4.0.0', () => {
     const cpu = createCPU();
-    expect(cpu.version).toBe('1.1.0');
+    expect(cpu.version).toBe('4.0.0');
   });
 });
 

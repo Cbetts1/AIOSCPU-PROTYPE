@@ -201,7 +201,7 @@ function createMemoryCore(kernel) {
 
   return {
     name:        'memory-core',
-    version:     '1.0.0',
+    version:     '4.0.0',
     record,
     recall,
     getContext,

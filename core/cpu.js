@@ -92,7 +92,7 @@ const FLAG_OF = 1 << 3;  // Overflow
 // AIOSCPU factory
 // ---------------------------------------------------------------------------
 function createCPU(kernel) {
-  const CPU_VERSION = '1.1.0';
+  const CPU_VERSION = '4.0.0';
   const MEM_SIZE    = 65536;      // 64 KB
   const NUM_REGS    = 8;
   const STACK_BASE  = 0x01FF;

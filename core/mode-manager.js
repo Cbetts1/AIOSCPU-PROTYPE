@@ -175,7 +175,7 @@ function createModeManager(kernel, memoryEngine) {
 
   return {
     name:           'mode-manager',
-    version:        '1.0.0',
+    version:        '4.0.0',
     setMode,
     getMode,
     getModeConfig,

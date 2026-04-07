@@ -208,7 +208,7 @@ function createStatusBar(kernel, options = {}) {
 
   return {
     name:    'status-bar',
-    version: '1.0.0',
+    version: '4.0.0',
     render,
     getLast,
     print,

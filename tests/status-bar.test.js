@@ -19,7 +19,7 @@ describe('createStatusBar', () => {
     const sb = createStatusBar(makeKernel());
     expect(sb).toBeDefined();
     expect(sb.name).toBe('status-bar');
-    expect(sb.version).toBe('1.0.0');
+    expect(sb.version).toBe('4.0.0');
   });
 
   test('works without a kernel', () => {

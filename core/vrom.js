@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/vrom.js — AIOS Virtual ROM v1.0.0
+ * core/vrom.js — AIOS Virtual ROM v4.0.0
  *
  * Read-only firmware store for the AIOS virtual hardware stack.
  * Equivalent to UEFI/BIOS tables: stores boot parameters, kernel config,
@@ -23,7 +23,7 @@ const crypto = require('crypto');
 // ---------------------------------------------------------------------------
 function createVROM(options) {
   const opts = options || {};
-  const VERSION  = '1.0.0';
+  const VERSION  = '4.0.0';
   const ROM_SIZE = opts.maxCells || 256;   // max number of named cells
 
   // cell name → { value: string, checksum: string, writtenAt: number }

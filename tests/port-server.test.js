@@ -58,7 +58,7 @@ describe('PortServer', () => {
     test('returns object with expected API', () => {
       expect(server).toBeDefined();
       expect(server.name).toBe('port-server');
-      expect(server.version).toBe('1.0.0');
+      expect(server.version).toBe('4.0.0');
       expect(typeof server.start).toBe('function');
       expect(typeof server.stop).toBe('function');
       expect(typeof server.status).toBe('function');

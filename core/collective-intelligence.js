@@ -31,7 +31,7 @@
  * Zero external npm dependencies.
  */
 
-const VERSION = '1.0.0';
+const VERSION = '4.0.0';
 
 // Max perspectives stored per model (oldest evicted when full)
 const MAX_PER_MODEL    = 200;

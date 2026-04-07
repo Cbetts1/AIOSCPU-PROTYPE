@@ -1,6 +1,6 @@
 'use strict';
 /**
- * consciousness.js — AIOS Consciousness Layer v1.0.0
+ * consciousness.js — AIOS Consciousness v4.0.0
  *
  * The central integration core for AIOS. Binds all AI models, memory,
  * and operating modes into a single, unified intelligent entity.
@@ -366,7 +366,7 @@ function createConsciousness(kernel, router, memoryEngine, modeManager, modelReg
         return {
           status: 'ok',
           result: [
-            'AIOS Consciousness v1.0.0',
+            'AIOS Consciousness v4.0.0',
             `Mode     : ${ctx.mode}`,
             `Memory   : ${ctx.memory ? `${ctx.memory.historyEntries} interactions, ${ctx.memory.learnedFacts} facts` : 'not available'}`,
             `Models   : ${ctx.models.map(m => `${m.name}(${m.healthy ? 'ok' : 'err'}${m.idle ? ',idle' : ''})`).join(' ') || 'none'}`,
@@ -419,7 +419,7 @@ function createConsciousness(kernel, router, memoryEngine, modeManager, modelReg
 
   return {
     name:             'consciousness',
-    version:          '1.0.0',
+    version:          '4.0.0',
     query,
     learn,
     getContext,

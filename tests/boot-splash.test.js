@@ -11,7 +11,7 @@ describe('createBootSplash', () => {
     const s = createBootSplash();
     expect(s).toBeDefined();
     expect(s.name).toBe('boot-splash');
-    expect(s.version).toBe('1.0.0');
+    expect(s.version).toBe('4.0.0');
     expect(typeof s.render).toBe('function');
     expect(typeof s.show).toBe('function');
     expect(typeof s.complete).toBe('function');

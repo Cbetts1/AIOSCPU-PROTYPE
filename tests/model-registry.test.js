@@ -21,7 +21,7 @@ describe('ModelRegistry', () => {
     test('returns object with expected API', () => {
       expect(registry).toBeDefined();
       expect(registry.name).toBe('model-registry');
-      expect(registry.version).toBe('1.0.0');
+      expect(registry.version).toBe('4.0.0');
       expect(typeof registry.register).toBe('function');
       expect(typeof registry.assignMode).toBe('function');
       expect(typeof registry.validate).toBe('function');

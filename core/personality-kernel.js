@@ -116,7 +116,7 @@ function createBackupBrain() {
 
   return {
     name:    'backup-brain',
-    version: '1.0.0',
+    version: '4.0.0',
     process,
     stats:   () => ({ queries: _queries, resolved: _resolved }),
   };
@@ -360,7 +360,7 @@ function createPersonalityKernel(kernel, primaryAICore, router, svcMgr, hwKernel
 
   return {
     name:            'personality-kernel',
-    version:         '1.0.0',
+    version:         '4.0.0',
     process,
     status,
     setPrimaryBrain,

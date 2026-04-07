@@ -21,7 +21,7 @@ describe('DiagnosticsEngine', () => {
   describe('createDiagnosticsEngine', () => {
     test('returns object with expected API', () => {
       expect(diag.name).toBe('diagnostics-engine');
-      expect(diag.version).toBe('1.0.0');
+      expect(diag.version).toBe('4.0.0');
       expect(typeof diag.captureHealth).toBe('function');
       expect(typeof diag.getHealth).toBe('function');
       expect(typeof diag.getSnapshots).toBe('function');

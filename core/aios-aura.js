@@ -1,6 +1,6 @@
 'use strict';
 /**
- * core/aios-aura.js — AIOS + AURA Dual-Identity Kernel AI v2.0.0
+ * core/aios-aura.js — AIOS+AURA AI v4.0.0
  *
  * PHONE-FIRST.  Works on Samsung/Termux.  Zero tokens.  100% local.
  * Uses Ollama for AI.  Graceful fallback when Ollama is offline.
@@ -497,7 +497,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
   function status() {
     return {
-      version:    '2.0.0',
+      version:    '4.0.0',
       identities: getIdentities(),
       listening:  _listening,
     };
@@ -604,7 +604,7 @@ function createAIOSAURA(kernel, svcMgr, hostBridge, memoryCore, consciousness, m
 
   return {
     name:    'aios-aura',
-    version: '2.0.0',
+    version: '4.0.0',
     // Public API
     query,
     clearHistory,

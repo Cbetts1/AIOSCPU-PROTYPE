@@ -1,6 +1,6 @@
 'use strict';
 /**
- * shell.js — AIOS Shell Interpreter v2.0.0
+ * shell.js — AIOS Shell v4.0.0
  *
  * A real shell engine built into AIOS. Supports:
  *   Variables     : VAR=value, $VAR, ${VAR}, export VAR
@@ -988,7 +988,7 @@ function createShell(router, filesystem, kernel, hostBridge) {
   // ---------------------------------------------------------------------------
   return {
     name:       'shell',
-    version:    '2.0.0',
+    version:    '4.0.0',
     runScript,
     runLine:    (line, args) => _runStatement(_expand(line, args), { args: args || [] }),
     sourceFile: _sourceFile,

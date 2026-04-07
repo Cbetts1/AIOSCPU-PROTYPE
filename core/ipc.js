@@ -1,6 +1,6 @@
 'use strict';
 /**
- * ipc.js — AIOS Inter-Process Communication v2.0.0
+ * ipc.js — AIOS IPC v4.0.0
  *
  * Full IPC system: named pipes, message queues, signals, shared memory.
  * All IPC state is mirrored into the AIOS VFS under /var/run/ipc/.
@@ -273,7 +273,7 @@ function createIPC(kernel, filesystem) {
   };
 
   return {
-    name: 'ipc', version: '2.0.0',
+    name: 'ipc', version: '4.0.0',
     SIGNALS,
     createPipe, writePipe, readPipe, peekPipe, watchPipe, destroyPipe,
     createQueue, enqueue, dequeue, peekQueue, purgeQueue,

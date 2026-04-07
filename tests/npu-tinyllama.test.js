@@ -43,7 +43,7 @@ describe('NPU TinyLlama', () => {
   describe('createNPUTinyLlama', () => {
     test('returns npu object with expected API', () => {
       expect(npu.name).toBe('npu-tinyllama');
-      expect(npu.version).toBe('1.0.0');
+      expect(npu.version).toBe('4.0.0');
       expect(npu.model).toBe('tinyllama');
       expect(typeof npu.init).toBe('function');
       expect(typeof npu.infer).toBe('function');

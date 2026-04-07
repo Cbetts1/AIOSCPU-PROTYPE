@@ -36,22 +36,22 @@ const OLLAMA_URL = 'http://127.0.0.1:11434';
 // AIOS component version matrix — the single source of truth
 // ---------------------------------------------------------------------------
 const COMPONENT_VERSIONS = [
-  { name: 'kernel',             version: '1.0.0', status: 'stable' },
-  { name: 'ai-core',            version: '3.0.0', status: 'stable' },
-  { name: 'aios-aura',          version: '2.0.0', status: 'stable' },
-  { name: 'consciousness',      version: '1.0.0', status: 'stable' },
-  { name: 'memory-engine',      version: '1.0.0', status: 'stable' },
-  { name: 'memory-core',        version: '1.0.0', status: 'stable' },
-  { name: 'diagnostics-engine', version: '1.0.0', status: 'stable' },
-  { name: 'service-manager',    version: '1.0.0', status: 'stable' },
-  { name: 'router',             version: '1.0.0', status: 'stable' },
-  { name: 'filesystem',         version: '1.0.0', status: 'stable' },
-  { name: 'port-server',        version: '1.0.0', status: 'stable' },
-  { name: 'host-bridge',        version: '1.0.0', status: 'stable' },
-  { name: 'scheduler',          version: '1.0.0', status: 'stable' },
-  { name: 'mode-manager',       version: '1.0.0', status: 'stable' },
-  { name: 'model-registry',     version: '1.0.0', status: 'stable' },
-  { name: 'upgrade-manager',    version: '1.0.0', status: 'stable' },
+  { name: 'kernel',             version: '4.0.0', status: 'stable' },
+  { name: 'ai-core',            version: '4.0.0', status: 'stable' },
+  { name: 'aios-aura',          version: '4.0.0', status: 'stable' },
+  { name: 'consciousness',      version: '4.0.0', status: 'stable' },
+  { name: 'memory-engine',      version: '4.0.0', status: 'stable' },
+  { name: 'memory-core',        version: '4.0.0', status: 'stable' },
+  { name: 'diagnostics-engine', version: '4.0.0', status: 'stable' },
+  { name: 'service-manager',    version: '4.0.0', status: 'stable' },
+  { name: 'router',             version: '4.0.0', status: 'stable' },
+  { name: 'filesystem',         version: '4.0.0', status: 'stable' },
+  { name: 'port-server',        version: '4.0.0', status: 'stable' },
+  { name: 'host-bridge',        version: '4.0.0', status: 'stable' },
+  { name: 'scheduler',          version: '4.0.0', status: 'stable' },
+  { name: 'mode-manager',       version: '4.0.0', status: 'stable' },
+  { name: 'model-registry',     version: '4.0.0', status: 'stable' },
+  { name: 'upgrade-manager',    version: '4.0.0', status: 'stable' },
 ];
 
 // Phone-first Ollama model recommendation list
@@ -450,7 +450,7 @@ function createUpgradeManager(kernel, svcMgr, hostBridge, diagnostics, vfs) {
 
   return {
     name:         'upgrade-manager',
-    version:      '1.0.0',
+    version:      '4.0.0',
     // Public API
     pullModel,
     removeModel,

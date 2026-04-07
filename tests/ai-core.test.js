@@ -37,7 +37,7 @@ describe('AICore', () => {
   describe('createAICore', () => {
     test('returns ai with expected API', () => {
       expect(ai.name).toBe('ai-core');
-      expect(ai.version).toBe('3.0.0');
+      expect(ai.version).toBe('4.0.0');
       expect(typeof ai.process).toBe('function');
       expect(typeof ai.registerBackend).toBe('function');
       expect(typeof ai.setBackend).toBe('function');

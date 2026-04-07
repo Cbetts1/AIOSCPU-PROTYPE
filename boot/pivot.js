@@ -50,12 +50,12 @@ class PivotContext {
  * @param {object} vfs     - AIOS VFS instance (may be null; manifest is written if provided)
  * @param {object} opts
  * @param {string} opts.rootfs   - logical AIOS root path (default: "/")
- * @param {string} opts.version  - AIOS version (default: "3.0.0")
+ * @param {string} opts.version ''4.0.0'")
  * @returns {PivotContext}
  */
 function pivot(vfs, opts = {}) {
   const rootfs   = opts.rootfs  || '/';
-  const version  = opts.version || '3.0.0';
+  const version ''4.0.0'';
   const platform = process.platform;
 
   const oldPath = process.env.PATH || '';

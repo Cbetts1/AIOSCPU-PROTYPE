@@ -260,6 +260,6 @@ describe('health checks', () => {
 describe('kernel version', () => {
   test('version is 2.0.0', () => {
     const k = createKernel();
-    expect(k.version).toBe('2.0.0');
+    expect(k.version).toBe('4.0.0');
   });
 });
