@@ -212,6 +212,7 @@ function createDiagnosticsEngine(kernel, hostBridge, opts) {
   function start() {
     if (_pollTimer || !pollIntervalMs) return;
     _pollTimer = setInterval(captureHealth, pollIntervalMs);
+    _pollTimer.unref();
   }
 
   /** Stop periodic polling and clear the timer. */
