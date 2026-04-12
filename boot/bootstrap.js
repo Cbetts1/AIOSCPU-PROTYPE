@@ -93,7 +93,11 @@ const { createEnvLoader }       = require('../usr/lib/aios/env-loader.js');
 const { createTerminal }        = require('../terminal/terminal.js');
 
 // ── Help Window ──────────────────────────────────────────────────────────────
-const { createHelpWindow }      = require('../core/help-window.js');
+const { createHelpWindow }          = require('../core/help-window.js');
+
+// ── Virtual-network expansion ─────────────────────────────────────────────────
+const { createCommandCenterAgent }  = require('../core/command-center-agent.js');
+const { createBuilderEngine }       = require('../core/builder-engine.js');
 
 // ── Self-kernel + loop engine (wraps existing; does not replace) ─────────────
 const selfKernelBoot  = require('../usr/lib/aios/self-kernel/boot.js');
@@ -729,6 +733,27 @@ function start() {
   kernel.modules.load('upgrade-manager', upgradeMgr);
   router.use('upgrade-manager', upgradeMgr);
   bootMsg('ok', `Upgrade Manager v${upgradeMgr.version}  online  (run: upgrade plan)`);
+
+  // ── 26a. BUILDER ENGINE ───────────────────────────────────────────────────
+  const builderEngine = createBuilderEngine(kernel, vfs, hostBridge);
+  kernel.modules.load('builder-engine', builderEngine);
+  router.use('builder-engine', builderEngine);
+  bootMsg('ok', `Builder Engine v${builderEngine.version}  online  (run: build help)`);
+
+  // ── 26b. COMMAND CENTER AGENT ─────────────────────────────────────────────
+  const ccAgent = createCommandCenterAgent(kernel, router, identity, diagnostics, svcMgr);
+  kernel.modules.load('command-center-agent', ccAgent);
+  router.use('command-center-agent', ccAgent);
+  bootMsg('ok', `CC Agent       v${ccAgent.version}  online  (run: cc status)`);
+  // Non-blocking: attempt registration; silently continues if CC is offline.
+  ccAgent.register().then(() => {
+    if (ccAgent.status().registered) {
+      ccAgent.startHeartbeat();
+      vfs.append('/var/log/boot.log', `[${ts()}] Command Center: registered, heartbeat started\n`);
+    } else {
+      vfs.append('/var/log/boot.log', `[${ts()}] Command Center: offline or not configured — running standalone\n`);
+    }
+  }).catch(() => {});
 
   // ── 27. BOOT INIT (PID-1) ─────────────────────────────────────────────────
   const bootInit = createBootInit({
