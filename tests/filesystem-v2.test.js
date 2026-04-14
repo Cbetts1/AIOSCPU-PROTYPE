@@ -1,6 +1,14 @@
 'use strict';
 /**
  * tests/filesystem-v2.test.js
+ *
+ * NOTE: This file tests v1.1 feature additions in core/filesystem.js.
+ * It is named "v2" because it was added in the Phase 1 hardening pass
+ * alongside the existing tests/filesystem.test.js (which covers the base VFS API).
+ * Both files test the same source: core/filesystem.js.
+ *   - tests/filesystem.test.js    → base VFS API (mkdir, ls, cd, read, write, rm, …)
+ *   - tests/filesystem-v2.test.js → v1.1 additions (mount table, atomic write, fsck, snapshot)
+ *
  * Tests for Filesystem v1.1 additions:
  *   - Virtual mount table
  *   - Atomic write

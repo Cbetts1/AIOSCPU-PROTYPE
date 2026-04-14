@@ -1,6 +1,15 @@
 'use strict';
 /**
- * scheduler.js — AIOS Scheduler v4.0.0
+ * scheduler.js — AIOS Scheduler v4.0.0  [CRON / TASK SCHEDULER]
+ *
+ * DISAMBIGUATION: There are two schedulers in this codebase.
+ *   • THIS FILE  (core/scheduler.js)        — Cron-style task scheduler for
+ *     named background jobs stored in /etc/cron/ in the AIOS VFS.
+ *     Used by: core/service-manager.js
+ *     Tested by: tests/scheduler.test.js
+ *   • OTHER FILE (usr/lib/aios/scheduler.js) — Tick-based priority round-robin
+ *     process scheduler for virtual OS processes.
+ *     Used by: boot/bootstrap.js
  *
  * Cron-style and interval task scheduler built into AIOS.
  * Jobs are stored in /etc/cron/ in the AIOS VFS for persistence.

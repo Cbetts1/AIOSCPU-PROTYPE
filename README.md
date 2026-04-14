@@ -1,14 +1,14 @@
 # AIOSCPU — AI-Operated Software CPU
 
-> **AIOS Lite v2.0.0 — The AI-native OS that runs anywhere Node.js does.**  
+> **AIOS Lite v4.0.0 — The AI-native OS that runs anywhere Node.js does.**  
 > Zero external dependencies · Pure Node.js · Boots on Android via Termux · Fully offline
 
 [![GitHub](https://img.shields.io/badge/GitHub-AI--OS--vitural--CPU--OS-black?logo=github)](https://github.com/Cbetts1/AI-OS-vitural-CPU-OS)
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](package.json)
-[![Tests](https://img.shields.io/badge/tests-1437%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1611%20passing-brightgreen.svg)](tests/)
 [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](README.md)
 
 ---
@@ -22,7 +22,7 @@ It boots from a single script (`./aos`) and includes its own:
 | Component | Version | Description |
 |-----------|---------|-------------|
 | 🧠 **AIOSCPU ISA** | v2.0 | Software-emulated 32-bit CPU with 30+ opcodes, registers, stack, SYSCALL |
-| ⚙️  **Kernel** | v2.0.0 | Event bus, process table, module registry, syscall dispatch, panic/assert |
+| ⚙️  **Kernel** | v4.0.0 | Event bus, process table, module registry, syscall dispatch, panic/assert |
 | 🗂  **Filesystem** | v1.1.0 | In-memory POSIX-like VFS + atomic writes, snapshots, fsck |
 | 🔀 **Router** | v1.0 | Command dispatcher with hot-swap plug-in modules |
 | 🛠  **Service Manager** | v1.0 | Start/stop/restart named background services |
@@ -255,6 +255,6 @@ and [`NOTICE`](NOTICE) for full IP and copyright information.
 
 ---
 
-*AIOSCPU — AI-Operated Software CPU · AIOS Lite v2.0.0*  
+*AIOSCPU — AI-Operated Software CPU · AIOS Lite v4.0.0*  
 *Built and owned by Cbetts1 · https://github.com/Cbetts1*
 

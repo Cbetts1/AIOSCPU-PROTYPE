@@ -2,6 +2,11 @@
 /**
  * module-loader.js — AIOS Dynamic Module Loader v1.0.0
  *
+ * @deprecated  NOT WIRED INTO BOOT — reserved for future use.
+ *   This module is not imported or instantiated by boot/bootstrap.js.
+ *   It is preserved as the planned runtime hot-swap extension loader.
+ *   To activate, instantiate via createModuleLoader(kernel, vfs, router).
+ *
  * Supports loading AIOS extension modules from:
  *   - The host filesystem (dynamic require() of a CommonJS module)
  *   - The VFS (/lib/modules/*.json — metadata-only manifests)

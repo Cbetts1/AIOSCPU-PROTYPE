@@ -1,4 +1,13 @@
 'use strict';
+/**
+ * tests/env-loader.test.js
+ *
+ * NOTE: This test file covers core/env-loader.js (v4.0.0), which is the
+ * broader, multi-profile env-loader with getLoginEnv() / getSystemEnv() /
+ * getAIEnv() helpers. The boot sequence (boot/bootstrap.js) uses a
+ * different, narrower variant at usr/lib/aios/env-loader.js (v1.0.0).
+ * Both modules share the same factory signature and VFS contract.
+ */
 
 const { createKernel } = require('../core/kernel');
 const { createFilesystem } = require('../core/filesystem');

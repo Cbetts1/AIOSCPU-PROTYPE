@@ -2,6 +2,12 @@
 /**
  * capability-engine.js — AIOS Capability Engine v1.0.0
  *
+ * @deprecated  NOT WIRED INTO BOOT — reserved for future use.
+ *   This module is not imported or instantiated by boot/bootstrap.js.
+ *   It is preserved as the planned POSIX-capability security layer.
+ *   To activate, instantiate via createCapabilityEngine(kernel) and
+ *   register with the permission system.
+ *
  * Implements a Linux-inspired capability model for the AIOS kernel.
  * Capabilities control what the OS and its processes are allowed to do
  * at the kernel level — analogous to Linux POSIX capabilities.

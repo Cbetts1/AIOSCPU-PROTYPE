@@ -1,4 +1,4 @@
-# DISCLAIMER — AIOSCPU v2.0.0
+# DISCLAIMER — AIOSCPU v4.0.0
 
 **AI-Operated Software CPU — AIOS Lite**  
 Copyright (c) 2026 Cbetts1. All rights reserved.
@@ -83,4 +83,4 @@ extent permitted by law.
 
 ---
 
-*AIOSCPU · AIOS Lite v2.0.0 · Copyright (c) 2026 Cbetts1 · MIT License*
+*AIOSCPU · AIOS Lite v4.0.0 · Copyright (c) 2026 Cbetts1 · MIT License*

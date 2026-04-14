@@ -1,6 +1,14 @@
 'use strict';
 /**
  * tests/cpu-v2.test.js
+ *
+ * NOTE: This file tests v1.1 feature additions in core/cpu.js.
+ * It is named "v2" because it was added in the Phase 1 hardening pass
+ * alongside the existing tests/cpu.test.js (which covers the base ISA).
+ * Both files test the same source: core/cpu.js.
+ *   - tests/cpu.test.js       → base ISA (NOP, MOV, LOADI, ADD, SUB, …, SYSCALL)
+ *   - tests/cpu-v2.test.js    → v1.1 additions (bounds checking, selfTest, NEG/ABS/INC/DEC)
+ *
  * Tests for CPU v1.1 additions:
  *   - Memory bounds checking
  *   - selfTest()

@@ -1,6 +1,15 @@
 'use strict';
 /**
- * scheduler.js — AIOS Virtual Process Scheduler v1.0.0
+ * scheduler.js — AIOS Virtual Process Scheduler v1.0.0  [PROCESS SCHEDULER]
+ *
+ * DISAMBIGUATION: There are two schedulers in this codebase.
+ *   • THIS FILE  (usr/lib/aios/scheduler.js) — Tick-based priority round-robin
+ *     process scheduler for virtual OS processes (HIGH/NORMAL/LOW priorities).
+ *     Used by: boot/bootstrap.js
+ *   • OTHER FILE (core/scheduler.js)          — Cron-style task scheduler for
+ *     named background jobs stored in /etc/cron/ in the AIOS VFS.
+ *     Used by: core/service-manager.js
+ *     Tested by: tests/scheduler.test.js
  *
  * Implements a tick-based, priority-aware round-robin scheduler
  * for AIOS virtual processes.

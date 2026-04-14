@@ -1,6 +1,20 @@
 'use strict';
 /**
- * boot.js — AIOS Lite Boot Sequence v2.0.0
+ * boot.js — AIOS Lite Legacy Standalone Boot v2.0.0
+ *
+ * NOTE: This is the legacy standalone boot sequence from the pre-v4.0 era.
+ * The canonical production entry point is boot/bootstrap.js (v4.0.0), which
+ * wires all current modules (VHAL, consciousness layer, Jarvis, loop engine,
+ * etc.) and is invoked by the `./aos` entry point.
+ *
+ * This file is retained for two reasons:
+ *   1. CI sanity check — ci.yml verifies it can still be require()'d without
+ *      crashing, confirming that the shared core modules (kernel.js, cpu.js,
+ *      filesystem.js, …) remain backward-compatible.
+ *   2. Minimal reference implementation — useful as a stripped-down
+ *      example of wiring the core OS modules without the full AI stack.
+ *
+ * Do NOT add new features here; make changes in boot/bootstrap.js instead.
  *
  * Full v2.0 boot order:
  *   1.  Kernel init

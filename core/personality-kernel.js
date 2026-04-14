@@ -2,6 +2,13 @@
 /**
  * personality-kernel.js — AIOS AI Personality Kernel v1.0.0
  *
+ * @deprecated  NOT WIRED INTO BOOT — reserved for future use.
+ *   This module is not imported or instantiated by boot/bootstrap.js.
+ *   It is preserved as the planned top-layer of the UniKernel stack:
+ *     Personality Kernel → Hardware Kernel → Software Kernel (kernel.js)
+ *   To activate, instantiate via createPersonalityKernel(kernel, aiCore,
+ *   router, svcMgr, hwKernel, stateEngine, memoryCore).
+ *
  * The AI "brain" layer of the AIOS UniKernel stack.
  * Sits above the Hardware Kernel and provides autonomous intelligence,
  * natural language understanding, and self-healing service management.

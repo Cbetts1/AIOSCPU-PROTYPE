@@ -2,6 +2,13 @@
 /**
  * hw-kernel.js — AIOS Uni Hardware Kernel v1.0.0
  *
+ * @deprecated  NOT WIRED INTO BOOT — reserved for future use.
+ *   This module is not imported or instantiated by boot/bootstrap.js.
+ *   It is preserved here as a design artefact of the planned UniKernel stack:
+ *     Personality Kernel → Hardware Kernel → Software Kernel (kernel.js)
+ *   To activate, instantiate via createHWKernel(kernel, hostBridge) and
+ *   pass the instance as the hwKernel argument to createPersonalityKernel().
+ *
  * The Hardware Integration Layer of the AIOS UniKernel stack.
  *
  * Architecture position:
