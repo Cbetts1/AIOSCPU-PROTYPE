@@ -39,6 +39,10 @@ describe('NPU TinyLlama', () => {
     npu        = createNPUTinyLlama(kernel, { memoryCore });
   });
 
+  afterEach(() => {
+    npu.destroy();
+  });
+
   // ── factory ────────────────────────────────────────────────────────────────
   describe('createNPUTinyLlama', () => {
     test('returns npu object with expected API', () => {

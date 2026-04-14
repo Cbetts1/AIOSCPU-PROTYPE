@@ -250,6 +250,14 @@ function createNPUTinyLlama(kernel, options) {
     unplug:  () => { if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; } },
   };
 
+  function destroy() {
+    if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+    const drained = _queue.splice(0);
+    for (const item of drained) {
+      item.reject(new Error('NPU destroyed'));
+    }
+  }
+
   return {
     name:    'npu-tinyllama',
     version: VERSION,
@@ -257,6 +265,7 @@ function createNPUTinyLlama(kernel, options) {
     device,
     init,
     infer,
+    destroy,
     isOnline:    () => _ollamaOnline,
     isReady:     () => _modelReady,
     queueLength: () => _queue.length,
